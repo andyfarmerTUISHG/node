@@ -24,7 +24,7 @@
 const common = require('../common');
 const assert = require('assert');
 
-// changes in environment should be visible to child processes
+// Changes in environment should be visible to child processes
 if (process.argv[2] === 'you-are-the-child') {
   assert.strictEqual('NODE_PROCESS_ENV_DELETED' in process.env, false);
   assert.strictEqual(process.env.NODE_PROCESS_ENV, '42');
@@ -59,16 +59,16 @@ if (process.argv[2] === 'you-are-the-child') {
   child.stderr.on('data', function(data) { console.log(data.toString()); });
   child.on('exit', function(statusCode) {
     if (statusCode !== 0) {
-      process.exit(statusCode);  // failed assertion in child process
+      process.exit(statusCode);  // Failed assertion in child process
     }
   });
 }
 
 
-// delete should return true except for non-configurable properties
+// Delete should return true except for non-configurable properties
 // https://github.com/nodejs/node/issues/7960
 delete process.env.NON_EXISTING_VARIABLE;
-assert.strictEqual(true, delete process.env.NON_EXISTING_VARIABLE);
+assert(delete process.env.NON_EXISTING_VARIABLE);
 
 /* For the moment we are not going to support setting the timezone via the
  * environment variables. The problem is that various V8 platform backends

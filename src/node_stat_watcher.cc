@@ -19,14 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "memory_tracker-inl.h"
 #include "node_stat_watcher.h"
-#include "node_internals.h"
 #include "async_wrap-inl.h"
 #include "env.h"
 #include "node_file.h"
+#include "util-inl.h"
 
-#include <string.h>
-#include <stdlib.h>
+#include <cstring>
+#include <cstdlib>
 
 namespace node {
 
@@ -55,7 +56,7 @@ void StatWatcher::Initialize(Environment* env, Local<Object> target) {
   env->SetProtoMethod(t, "start", StatWatcher::Start);
 
   target->Set(env->context(), statWatcherString,
-              t->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              t->GetFunction(env->context()).ToLocalChecked()).Check();
 }
 
 

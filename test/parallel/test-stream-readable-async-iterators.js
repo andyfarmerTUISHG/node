@@ -1,7 +1,7 @@
 'use strict';
 
 const common = require('../common');
-const { Readable, PassThrough, pipeline } = require('stream');
+const { Readable, Transform, PassThrough, pipeline } = require('stream');
 const assert = require('assert');
 
 async function tests() {
@@ -14,7 +14,7 @@ async function tests() {
       AsyncIteratorPrototype);
   }
 
-  await (async function() {
+  {
     const readable = new Readable({ objectMode: true, read() {} });
     readable.push(0);
     readable.push(1);
@@ -25,9 +25,9 @@ async function tests() {
     for await (const d of iter) {
       assert.strictEqual(d, 1);
     }
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('read without for..await');
     const max = 5;
     const readable = new Readable({
@@ -55,9 +55,9 @@ async function tests() {
 
     const last = await iter.next();
     assert.strictEqual(last.done, true);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('read without for..await deferred');
     const readable = new Readable({
       objectMode: true,
@@ -95,9 +95,9 @@ async function tests() {
 
     const last = await iter.next();
     assert.strictEqual(last.done, true);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('read without for..await with errors');
     const max = 3;
     const readable = new Readable({
@@ -133,9 +133,9 @@ async function tests() {
     });
 
     readable.destroy(new Error('kaboom'));
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('call next() after error');
     const readable = new Readable({
       read() {}
@@ -145,9 +145,9 @@ async function tests() {
     const err = new Error('kaboom');
     readable.destroy(new Error('kaboom'));
     await assert.rejects(iterator.next.bind(iterator), err);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('read object mode');
     const max = 42;
     let readed = 0;
@@ -168,9 +168,9 @@ async function tests() {
     }
 
     assert.strictEqual(readed, received);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('destroy sync');
     const readable = new Readable({
       objectMode: true,
@@ -187,9 +187,9 @@ async function tests() {
       err = e;
     }
     assert.strictEqual(err.message, 'kaboom from read');
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('destroy async');
     const readable = new Readable({
       objectMode: true,
@@ -219,9 +219,9 @@ async function tests() {
 
     assert.strictEqual(err.message, 'kaboom');
     assert.strictEqual(received, 1);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('destroyed by throw');
     const readable = new Readable({
       objectMode: true,
@@ -242,9 +242,9 @@ async function tests() {
 
     assert.strictEqual(err.message, 'kaboom');
     assert.strictEqual(readable.destroyed, true);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('destroyed sync after push');
     const readable = new Readable({
       objectMode: true,
@@ -268,9 +268,9 @@ async function tests() {
 
     assert.strictEqual(err.message, 'kaboom');
     assert.strictEqual(received, 1);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('push async');
     const max = 42;
     let readed = 0;
@@ -293,9 +293,9 @@ async function tests() {
     }
 
     assert.strictEqual(readed, received);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('push binary async');
     const max = 42;
     let readed = 0;
@@ -323,9 +323,9 @@ async function tests() {
     }
 
     assert.strictEqual(data, expected);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('.next() on destroyed stream');
     const readable = new Readable({
       read() {
@@ -337,9 +337,9 @@ async function tests() {
 
     const { done } = await readable[Symbol.asyncIterator]().next();
     assert.strictEqual(done, true);
-  })();
+  }
 
-  await (async function() {
+  {
     console.log('.next() on pipelined stream');
     const readable = new Readable({
       read() {
@@ -353,14 +353,16 @@ async function tests() {
       assert.strictEqual(e, err);
     }));
     readable.destroy(err);
-    try {
-      await readable[Symbol.asyncIterator]().next();
-    } catch (e) {
-      assert.strictEqual(e, err);
-    }
-  })();
+    await assert.rejects(
+      readable[Symbol.asyncIterator]().next(),
+      (e) => {
+        assert.strictEqual(e, err);
+        return true;
+      }
+    );
+  }
 
-  await (async () => {
+  {
     console.log('iterating on an ended stream completes');
     const r = new Readable({
       objectMode: true,
@@ -376,9 +378,9 @@ async function tests() {
     // eslint-disable-next-line no-unused-vars
     for await (const b of r) {
     }
-  })();
+  }
 
-  await (async () => {
+  {
     console.log('destroy mid-stream does not error');
     const r = new Readable({
       objectMode: true,
@@ -392,8 +394,138 @@ async function tests() {
     for await (const a of r) {
       r.destroy(null);
     }
-  })();
+  }
+
+  {
+    console.log('readable side of a transform stream pushes null');
+    const transform = new Transform({
+      objectMode: true,
+      transform: (chunk, enc, cb) => { cb(null, chunk); }
+    });
+    transform.push(0);
+    transform.push(1);
+    process.nextTick(() => {
+      transform.push(null);
+    });
+
+    const mustReach = [ common.mustCall(), common.mustCall() ];
+
+    const iter = transform[Symbol.asyncIterator]();
+    assert.strictEqual((await iter.next()).value, 0);
+
+    for await (const d of iter) {
+      assert.strictEqual(d, 1);
+      mustReach[0]();
+    }
+    mustReach[1]();
+  }
+
+  {
+    console.log('all next promises must be resolved on end');
+    const r = new Readable({
+      objectMode: true,
+      read() {
+      }
+    });
+
+    const b = r[Symbol.asyncIterator]();
+    const c = b.next();
+    const d = b.next();
+    r.push(null);
+    assert.deepStrictEqual(await c, { done: true, value: undefined });
+    assert.deepStrictEqual(await d, { done: true, value: undefined });
+  }
+
+  {
+    console.log('all next promises must be resolved on destroy');
+    const r = new Readable({
+      objectMode: true,
+      read() {
+      }
+    });
+
+    const b = r[Symbol.asyncIterator]();
+    const c = b.next();
+    const d = b.next();
+    r.destroy();
+    assert.deepStrictEqual(await c, { done: true, value: undefined });
+    assert.deepStrictEqual(await d, { done: true, value: undefined });
+  }
+
+  {
+    console.log('all next promises must be resolved on destroy with error');
+    const r = new Readable({
+      objectMode: true,
+      read() {
+      }
+    });
+
+    const b = r[Symbol.asyncIterator]();
+    const c = b.next();
+    const d = b.next();
+    const err = new Error('kaboom');
+    r.destroy(err);
+
+    await Promise.all([(async () => {
+      let e;
+      try {
+        await c;
+      } catch (_e) {
+        e = _e;
+      }
+      assert.strictEqual(e, err);
+    })(), (async () => {
+      let e;
+      try {
+        await d;
+      } catch (_e) {
+        e = _e;
+      }
+      assert.strictEqual(e, err);
+    })()]);
+  }
 }
 
-// to avoid missing some tests if a promise does not resolve
+{
+  // AsyncIterator return should end even when destroy
+  // does not implement the callback API.
+
+  const r = new Readable({
+    objectMode: true,
+    read() {
+    }
+  });
+
+  const originalDestroy = r.destroy;
+  r.destroy = (err) => {
+    originalDestroy.call(r, err);
+  };
+  const it = r[Symbol.asyncIterator]();
+  const p = it.return();
+  r.push(null);
+  p.then(common.mustCall());
+}
+
+
+{
+  // AsyncIterator return should not error with
+  // premature close.
+
+  const r = new Readable({
+    objectMode: true,
+    read() {
+    }
+  });
+
+  const originalDestroy = r.destroy;
+  r.destroy = (err) => {
+    originalDestroy.call(r, err);
+  };
+  const it = r[Symbol.asyncIterator]();
+  const p = it.return();
+  r.emit('close');
+  p.then(common.mustCall()).catch(common.mustNotCall());
+}
+
+// To avoid missing some tests if a promise does not resolve
 tests().then(common.mustCall());

@@ -5,6 +5,7 @@ const common = require('../common');
 const { internalBinding } = require('internal/test/binding');
 const assert = require('assert');
 const fs = require('fs');
+const v8 = require('v8');
 const fsPromises = fs.promises;
 const net = require('net');
 const providers = Object.assign({}, internalBinding('async_wrap').Providers);
@@ -47,6 +48,9 @@ const { getSystemErrorName } = require('util');
     if (!common.isMainThread)
       delete providers.INSPECTORJSBINDING;
     delete providers.KEYPAIRGENREQUEST;
+    delete providers.HTTPCLIENTREQUEST;
+    delete providers.HTTPINCOMINGMESSAGE;
+    delete providers.ELDHISTOGRAM;
 
     const objKeys = Object.keys(providers);
     if (objKeys.length > 0)
@@ -148,8 +152,11 @@ if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
 
 
 {
-  const { HTTPParser } = internalBinding('http_parser');
-  testInitialized(new HTTPParser(HTTPParser.REQUEST), 'HTTPParser');
+  const { HTTPParser } = require('_http_common');
+  const parser = new HTTPParser();
+  testUninitialized(parser, 'HTTPParser');
+  parser.initialize(HTTPParser.REQUEST, {});
+  testInitialized(parser, 'HTTPParser');
 }
 
 
@@ -260,16 +267,15 @@ if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
   const { TCP, constants: TCPConstants } = internalBinding('tcp_wrap');
   const tcp = new TCP(TCPConstants.SOCKET);
 
-  const ca = fixtures.readSync('test_ca.pem', 'ascii');
-  const cert = fixtures.readSync('test_cert.pem', 'ascii');
-  const key = fixtures.readSync('test_key.pem', 'ascii');
+  const ca = fixtures.readKey('rsa_ca.crt');
+  const cert = fixtures.readKey('rsa_cert.crt');
+  const key = fixtures.readKey('rsa_private.pem');
 
   const credentials = require('tls').createSecureContext({ ca, cert, key });
 
   // TLSWrap is exposed, but needs to be instantiated via tls_wrap.wrap().
   const tls_wrap = internalBinding('tls_wrap');
-  testInitialized(
-    tls_wrap.wrap(tcp._externalStream, credentials.context, true), 'TLSWrap');
+  testInitialized(tls_wrap.wrap(tcp, credentials.context, true), 'TLSWrap');
 }
 
 {
@@ -289,10 +295,14 @@ if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
   testInitialized(req, 'SendWrap');
 }
 
-if (process.config.variables.v8_enable_inspector !== 0 &&
-    common.isMainThread) {
-  const binding = process.binding('inspector');
+if (process.features.inspector && common.isMainThread) {
+  const binding = internalBinding('inspector');
   const handle = new binding.Connection(() => {});
   testInitialized(handle, 'Connection');
   handle.disconnect();
+}
+
+// PROVIDER_HEAPDUMP
+{
+  v8.getHeapSnapshot().destroy();
 }

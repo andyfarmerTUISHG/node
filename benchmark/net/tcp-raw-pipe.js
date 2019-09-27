@@ -5,7 +5,7 @@
 const common = require('../common.js');
 const util = require('util');
 
-// if there are --dur=N and --len=N args, then
+// If there are --dur=N and --len=N args, then
 // run the function with those settings.
 // if not, then queue up a bunch of child processes.
 const bench = common.createBenchmark(main, {
@@ -44,8 +44,8 @@ function main({ dur, len, type }) {
       fail(err, 'connect');
 
     clientHandle.onread = function(buffer) {
-      // we're not expecting to ever get an EOF from the client.
-      // just lots of data forever.
+      // We're not expecting to ever get an EOF from the client.
+      // Just lots of data forever.
       if (!buffer)
         fail('read');
 
@@ -104,8 +104,8 @@ function main({ dur, len, type }) {
 
     clientHandle.readStart();
 
-    setTimeout(function() {
-      // multiply by 2 since we're sending it first one way
+    setTimeout(() => {
+      // Multiply by 2 since we're sending it first one way
       // then then back again.
       bench.end(2 * (bytes * 8) / (1024 * 1024 * 1024));
       process.exit(0);

@@ -25,6 +25,10 @@ function Benchmark(fn, configs, options) {
   if (options && options.flags) {
     this.flags = this.flags.concat(options.flags);
   }
+  if (process.env.NODE_BENCHMARK_FLAGS) {
+    const flags = process.env.NODE_BENCHMARK_FLAGS.split(/\s+/);
+    this.flags = this.flags.concat(flags);
+  }
   // Holds process.hrtime value
   this._time = [0, 0];
   // Used to make sure a benchmark only start a timer once
@@ -118,18 +122,19 @@ Benchmark.prototype.http = function(options, cb) {
                              self.config.benchmarker ||
                              self.extra_options.benchmarker ||
                              exports.default_http_benchmarker;
-  http_benchmarkers.run(http_options, function(error, code, used_benchmarker,
-                                               result, elapsed) {
-    if (cb) {
-      cb(code);
+  http_benchmarkers.run(
+    http_options, (error, code, used_benchmarker, result, elapsed) => {
+      if (cb) {
+        cb(code);
+      }
+      if (error) {
+        console.error(error);
+        process.exit(code || 1);
+      }
+      self.config.benchmarker = used_benchmarker;
+      self.report(result, elapsed);
     }
-    if (error) {
-      console.error(error);
-      process.exit(code || 1);
-    }
-    self.config.benchmarker = used_benchmarker;
-    self.report(result, elapsed);
-  });
+  );
 };
 
 Benchmark.prototype._run = function() {
@@ -139,14 +144,14 @@ Benchmark.prototype._run = function() {
     process.send({
       type: 'config',
       name: this.name,
-      queueLength: this.queue.length
+      queueLength: this.queue.length,
     });
   }
 
   (function recursive(queueIndex) {
     const config = self.queue[queueIndex];
 
-    // set NODE_RUN_BENCHMARK_FN to indicate that the child shouldn't construct
+    // Set NODE_RUN_BENCHMARK_FN to indicate that the child shouldn't construct
     // a configuration queue, but just execute the benchmark function.
     const childEnv = Object.assign({}, process.env);
     childEnv.NODE_RUN_BENCHMARK_FN = '';
@@ -162,13 +167,12 @@ Benchmark.prototype._run = function() {
 
     const child = child_process.fork(require.main.filename, childArgs, {
       env: childEnv,
-      execArgv: self.flags.concat(process.execArgv)
+      execArgv: self.flags.concat(process.execArgv),
     });
     child.on('message', sendResult);
-    child.on('close', function(code) {
+    child.on('close', (code) => {
       if (code) {
         process.exit(code);
-        return;
       }
 
       if (queueIndex + 1 < self.queue.length) {
@@ -187,7 +191,7 @@ Benchmark.prototype.start = function() {
 };
 
 Benchmark.prototype.end = function(operations) {
-  // get elapsed time now and do error checking later for accuracy.
+  // Get elapsed time now and do error checking later for accuracy.
   const elapsed = process.hrtime(this._time);
 
   if (!this._started) {
@@ -202,7 +206,7 @@ Benchmark.prototype.end = function(operations) {
   if (elapsed[0] === 0 && elapsed[1] === 0) {
     if (!process.env.NODEJS_BENCHMARK_ZERO_ALLOWED)
       throw new Error('insufficient clock precision for short benchmark');
-    // avoid dividing by zero
+    // Avoid dividing by zero
     elapsed[1] = 1;
   }
 
@@ -241,7 +245,7 @@ Benchmark.prototype.report = function(rate, elapsed) {
     conf: this.config,
     rate: rate,
     time: elapsed[0] + elapsed[1] / 1e9,
-    type: 'report'
+    type: 'report',
   });
 };
 
@@ -267,7 +271,7 @@ const urls = {
   ws: 'ws://localhost:9229/f46db715-70df-43ad-a359-7f9949f39868',
   javascript: 'javascript:alert("node is awesome");',
   percent: 'https://%E4%BD%A0/foo',
-  dot: 'https://example.org/./a/../b/./c'
+  dot: 'https://example.org/./a/../b/./c',
 };
 exports.urls = urls;
 
@@ -282,7 +286,7 @@ const searchParams = {
                   'foo=ghi&foo=jkl&foo=mno&foo=pqr&foo=stu&foo=vwxyz',
   manypairs: 'a&b&c&d&e&f&g&h&i&j&k&l&m&n&o&p&q&r&s&t&u&v&w&x&y&z',
   manyblankpairs: '&&&&&&&&&&&&&&&&&&&&&&&&',
-  altspaces: 'foo+bar=baz+quux&xyzzy+thud=quuy+quuz&abc=def+ghi'
+  altspaces: 'foo+bar=baz+quux&xyzzy+thud=quuy+quuz&abc=def+ghi',
 };
 exports.searchParams = searchParams;
 

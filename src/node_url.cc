@@ -2,14 +2,16 @@
 #include "base_object-inl.h"
 #include "node_errors.h"
 #include "node_i18n.h"
-#include "node_internals.h"
+#include "util-inl.h"
 
+#include <cmath>
+#include <cstdio>
 #include <string>
 #include <vector>
-#include <stdio.h>
-#include <cmath>
 
 namespace node {
+
+using errors::TryCatchScope;
 
 using v8::Array;
 using v8::Context;
@@ -25,7 +27,6 @@ using v8::NewStringType;
 using v8::Null;
 using v8::Object;
 using v8::String;
-using v8::TryCatch;
 using v8::Undefined;
 using v8::Value;
 
@@ -787,10 +788,11 @@ inline bool ToASCII(const std::string& input, std::string* output) {
 
 void URLHost::ParseIPv6Host(const char* input, size_t length) {
   CHECK_EQ(type_, HostType::H_FAILED);
-  for (unsigned n = 0; n < 8; n++)
+  unsigned size = arraysize(value_.ipv6);
+  for (unsigned n = 0; n < size; n++)
     value_.ipv6[n] = 0;
   uint16_t* piece_pointer = &value_.ipv6[0];
-  uint16_t* const buffer_end = piece_pointer + 8;
+  uint16_t* const buffer_end = piece_pointer + size;
   uint16_t* compress_pointer = nullptr;
   const char* pointer = input;
   const char* end = pointer + length;
@@ -952,7 +954,7 @@ void URLHost::ParseIPv4Host(const char* input, size_t length, bool* is_ipv4) {
     const char ch = pointer < end ? pointer[0] : kEOL;
     const int remaining = end - pointer - 1;
     if (ch == '.' || ch == kEOL) {
-      if (++parts > 4)
+      if (++parts > static_cast<int>(arraysize(numbers)))
         return;
       if (pointer == mark)
         return;
@@ -1188,15 +1190,6 @@ inline std::vector<std::string> FromJSStringArray(Environment* env,
   return vec;
 }
 
-inline Local<Array> ToJSStringArray(Environment* env,
-                                    const std::vector<std::string>& vec) {
-  Isolate* isolate = env->isolate();
-  Local<Array> array = Array::New(isolate, vec.size());
-  for (size_t n = 0; n < vec.size(); n++)
-    array->Set(env->context(), n, Utf8String(isolate, vec[n])).FromJust();
-  return array;
-}
-
 inline url_data HarvestBase(Environment* env, Local<Object> base_obj) {
   url_data base;
   Local<Context> context = env->context();
@@ -1209,21 +1202,33 @@ inline url_data HarvestBase(Environment* env, Local<Object> base_obj) {
       base_obj->Get(env->context(), env->scheme_string()).ToLocalChecked();
   base.scheme = Utf8Value(env->isolate(), scheme).out();
 
-  auto GetStr = [&](std::string url_data::* member,
+  auto GetStr = [&](std::string url_data::*member,
                     int flag,
-                    Local<String> name) {
+                    Local<String> name,
+                    bool empty_as_present) {
     Local<Value> value = base_obj->Get(env->context(), name).ToLocalChecked();
     if (value->IsString()) {
       Utf8Value utf8value(env->isolate(), value.As<String>());
       (base.*member).assign(*utf8value, utf8value.length());
-      base.flags |= flag;
+      if (empty_as_present || value.As<String>()->Length() != 0) {
+        base.flags |= flag;
+      }
     }
   };
-  GetStr(&url_data::username, URL_FLAGS_HAS_USERNAME, env->username_string());
-  GetStr(&url_data::password, URL_FLAGS_HAS_PASSWORD, env->password_string());
-  GetStr(&url_data::host, URL_FLAGS_HAS_HOST, env->host_string());
-  GetStr(&url_data::query, URL_FLAGS_HAS_QUERY, env->query_string());
-  GetStr(&url_data::fragment, URL_FLAGS_HAS_FRAGMENT, env->fragment_string());
+  GetStr(&url_data::username,
+         URL_FLAGS_HAS_USERNAME,
+         env->username_string(),
+         false);
+  GetStr(&url_data::password,
+         URL_FLAGS_HAS_PASSWORD,
+         env->password_string(),
+         false);
+  GetStr(&url_data::host, URL_FLAGS_HAS_HOST, env->host_string(), true);
+  GetStr(&url_data::query, URL_FLAGS_HAS_QUERY, env->query_string(), true);
+  GetStr(&url_data::fragment,
+         URL_FLAGS_HAS_FRAGMENT,
+         env->fragment_string(),
+         true);
 
   Local<Value> port =
       base_obj->Get(env->context(), env->port_string()).ToLocalChecked();
@@ -1364,6 +1369,7 @@ void URL::Parse(const char* input,
       else
         break;
     }
+    input = p;
     len = end - p;
   }
 
@@ -2047,7 +2053,7 @@ void URL::Parse(const char* input,
             break;
           default:
             if (url->path.size() == 0)
-              url->path.push_back("");
+              url->path.emplace_back("");
             if (url->path.size() > 0 && ch != kEOL)
               AppendOrEscape(&url->path[0], ch, C0_CONTROL_ENCODE_SET);
         }
@@ -2104,7 +2110,7 @@ static inline void SetArgs(Environment* env,
   if (url.port > -1)
     argv[ARG_PORT] = Integer::New(isolate, url.port);
   if (url.flags & URL_FLAGS_HAS_PATH)
-    argv[ARG_PATH] = ToJSStringArray(env, url.path);
+    argv[ARG_PATH] = ToV8Value(env->context(), url.path).ToLocalChecked();
 }
 
 static void Parse(Environment* env,
@@ -2366,7 +2372,7 @@ URL URL::FromFilePath(const std::string& file_path) {
 // This function works by calling out to a JS function that creates and
 // returns the JS URL object. Be mindful of the JS<->Native boundary
 // crossing that is required.
-const Local<Value> URL::ToObject(Environment* env) const {
+MaybeLocal<Value> URL::ToObject(Environment* env) const {
   Isolate* isolate = env->isolate();
   Local<Context> context = env->context();
   Context::Scope context_scope(context);
@@ -2392,7 +2398,7 @@ const Local<Value> URL::ToObject(Environment* env) const {
 
   MaybeLocal<Value> ret;
   {
-    FatalTryCatch try_catch(env);
+    TryCatchScope try_catch(env, TryCatchScope::CatchMode::kFatal);
 
     // The SetURLConstructor method must have been called already to
     // set the constructor function used below. SetURLConstructor is
@@ -2402,7 +2408,7 @@ const Local<Value> URL::ToObject(Environment* env) const {
         ->Call(env->context(), undef, arraysize(argv), argv);
   }
 
-  return ret.ToLocalChecked();
+  return ret;
 }
 
 static void SetURLConstructor(const FunctionCallbackInfo<Value>& args) {

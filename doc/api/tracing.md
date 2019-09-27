@@ -20,6 +20,7 @@ The available categories are:
 * `node.bootstrap` - Enables capture of Node.js bootstrap milestones.
 * `node.console` - Enables capture of `console.time()` and `console.count()`
   output.
+* `node.dns.native` - Enables capture of trace data for DNS queries.
 * `node.environment` - Enables capture of Node.js Environment milestones.
 * `node.fs.sync` - Enables capture of trace data for file system sync methods.
 * `node.perf` - Enables capture of [Performance API] measurements.
@@ -133,7 +134,7 @@ t2.enable();
 // Prints 'node,node.perf,v8'
 console.log(trace_events.getEnabledCategories());
 
-t2.disable(); // will only disable emission of the 'node.perf' category
+t2.disable(); // Will only disable emission of the 'node.perf' category
 
 // Prints 'node,v8'
 console.log(trace_events.getEnabledCategories());
@@ -206,5 +207,5 @@ console.log(trace_events.getEnabledCategories());
 
 [Performance API]: perf_hooks.html
 [V8]: v8.html
-[`async_hooks`]: async_hooks.html
 [`Worker`]: worker_threads.html#worker_threads_class_worker
+[`async_hooks`]: async_hooks.html

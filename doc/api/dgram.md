@@ -27,7 +27,7 @@ server.on('listening', () => {
 });
 
 server.bind(41234);
-// server listening 0.0.0.0:41234
+// Prints: server listening 0.0.0.0:41234
 ```
 
 ## Class: dgram.Socket
@@ -35,8 +35,9 @@ server.bind(41234);
 added: v0.1.99
 -->
 
-The `dgram.Socket` object is an [`EventEmitter`][] that encapsulates the
-datagram functionality.
+* Extends: {EventEmitter}
+
+Encapsulates the datagram functionality.
 
 New instances of `dgram.Socket` are created using [`dgram.createSocket()`][].
 The `new` keyword is not to be used to create `dgram.Socket` instances.
@@ -48,6 +49,14 @@ added: v0.1.99
 
 The `'close'` event is emitted after a socket is closed with [`close()`][].
 Once triggered, no new `'message'` events will be emitted on this socket.
+
+### Event: 'connect'
+<!-- YAML
+added: v12.0.0
+-->
+
+The `'connect'` event is emitted after a socket is associated to a remote
+address as a result of a successful [`connect()`][] call.
 
 ### Event: 'error'
 <!-- YAML
@@ -74,6 +83,7 @@ added: v0.1.99
 
 The `'message'` event is emitted when a new datagram is available on a socket.
 The event handler function is passed two arguments: `msg` and `rinfo`.
+
 * `msg` {Buffer} The message.
 * `rinfo` {Object} Remote address information.
   * `address` {string} The sender address.
@@ -141,7 +151,7 @@ attempt to listen on all addresses. Once binding is complete, a
 `'listening'` event is emitted and the optional `callback` function is
 called.
 
-Note that specifying both a `'listening'` event listener and passing a
+Specifying both a `'listening'` event listener and passing a
 `callback` to the `socket.bind()` method is not harmful but not very
 useful.
 
@@ -172,7 +182,7 @@ server.on('listening', () => {
 });
 
 server.bind(41234);
-// server listening 0.0.0.0:41234
+// Prints: server listening 0.0.0.0:41234
 ```
 
 ### socket.bind(options[, callback])
@@ -201,12 +211,12 @@ than `0` is set, it will wrap around an existing socket with the given
 file descriptor. In this case, the properties of `port` and `address`
 will be ignored.
 
-Note that specifying both a `'listening'` event listener and passing a
+Specifying both a `'listening'` event listener and passing a
 `callback` to the `socket.bind()` method is not harmful but not very
 useful.
 
 The `options` object may contain an additional `exclusive` property that is
-use when using `dgram.Socket` objects with the [`cluster`] module. When
+used when using `dgram.Socket` objects with the [`cluster`] module. When
 `exclusive` is set to `false` (the default), cluster workers will use the same
 underlying socket handle allowing connection handling duties to be shared.
 When `exclusive` is `true`, however, the handle is not shared and attempted
@@ -232,10 +242,39 @@ socket.bind({
 <!-- YAML
 added: v0.1.99
 -->
+
 * `callback` {Function} Called when the socket has been closed.
 
 Close the underlying socket and stop listening for data on it. If a callback is
 provided, it is added as a listener for the [`'close'`][] event.
+
+### socket.connect(port[, address][, callback])
+<!-- YAML
+added: v12.0.0
+-->
+
+* `port` {integer}
+* `address` {string}
+* `callback` {Function} Called when the connection is completed or on error.
+
+Associates the `dgram.Socket` to a remote address and port. Every
+message sent by this handle is automatically sent to that destination. Also,
+the socket will only receive messages from that remote peer.
+Trying to call `connect()` on an already connected socket will result
+in an [`ERR_SOCKET_DGRAM_IS_CONNECTED`][] exception. If `address` is not
+provided, `'127.0.0.1'` (for `udp4` sockets) or `'::1'` (for `udp6` sockets)
+will be used by default. Once the connection is complete, a `'connect'` event
+is emitted and the optional `callback` function is called. In case of failure,
+the `callback` is called or, failing this, an `'error'` event is emitted.
+
+### socket.disconnect()
+<!-- YAML
+added: v12.0.0
+-->
+
+A synchronous function that disassociates a connected `dgram.Socket` from
+its remote address. Trying to call `disconnect()` on an already disconnected
+socket will result in an [`ERR_SOCKET_DGRAM_NOT_CONNECTED`][] exception.
 
 ### socket.dropMembership(multicastAddress[, multicastInterface])
 <!-- YAML
@@ -283,7 +322,18 @@ Calling `socket.ref()` multiples times will have no additional effect.
 The `socket.ref()` method returns a reference to the socket so calls can be
 chained.
 
-### socket.send(msg[, offset, length], port[, address][, callback])
+### socket.remoteAddress()
+<!-- YAML
+added: v12.0.0
+-->
+
+* Returns: {Object}
+
+Returns an object containing the `address`, `family`, and `port` of the remote
+endpoint. It throws an [`ERR_SOCKET_DGRAM_NOT_CONNECTED`][] exception if the
+socket is not connected.
+
+### socket.send(msg[, offset, length][, port][, address][, callback])
 <!-- YAML
 added: v0.1.99
 changes:
@@ -301,6 +351,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/4374
     description: The `msg` parameter can be an array now. Also, the `offset`
                  and `length` parameters are optional now.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/26871
+    description: Added support for sending data on connected sockets.
 -->
 
 * `msg` {Buffer|Uint8Array|string|Array} Message to be sent.
@@ -310,8 +363,10 @@ changes:
 * `address` {string} Destination hostname or IP address.
 * `callback` {Function} Called when the message has been sent.
 
-Broadcasts a datagram on the socket. The destination `port` and `address` must
-be specified.
+Broadcasts a datagram on the socket.
+For connectionless sockets, the destination `port` and `address` must be
+specified. Connected sockets, on the other hand, will use their associated
+remote endpoint, so the `port` and `address` arguments must not be set.
 
 The `msg` argument contains the message to be sent.
 Depending on its type, different behavior can apply. If `msg` is a `Buffer`
@@ -335,7 +390,7 @@ is assigned a random port number and is bound to the "all interfaces" address
 
 An optional `callback` function may be specified to as a way of reporting
 DNS errors or for determining when it is safe to reuse the `buf` object.
-Note that DNS lookups delay the time to send for at least one tick of the
+DNS lookups delay the time to send for at least one tick of the
 Node.js event loop.
 
 The only way to know for sure that the datagram has been sent is by using a
@@ -375,18 +430,32 @@ application and operating system. It is important to run benchmarks to
 determine the optimal strategy on a case-by-case basis. Generally speaking,
 however, sending multiple buffers is faster.
 
+Example of sending a UDP packet using a socket connected to a port on
+`localhost`:
+
+```js
+const dgram = require('dgram');
+const message = Buffer.from('Some bytes');
+const client = dgram.createSocket('udp4');
+client.connect(41234, 'localhost', (err) => {
+  client.send(message, (err) => {
+    client.close();
+  });
+});
+```
+
 **A Note about UDP datagram size**
 
 The maximum size of an `IPv4/v6` datagram depends on the `MTU`
 (_Maximum Transmission Unit_) and on the `Payload Length` field size.
 
-- The `Payload Length` field is `16 bits` wide, which means that a normal
+* The `Payload Length` field is `16 bits` wide, which means that a normal
   payload exceed 64K octets _including_ the internet header and data
   (65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header);
   this is generally true for loopback interfaces, but such long datagram
   messages are impractical for most hosts and networks.
 
-- The `MTU` is the largest size a given link layer technology can support for
+* The `MTU` is the largest size a given link layer technology can support for
   datagram messages. For any link, `IPv4` mandates a minimum `MTU` of `68`
   octets, while the recommended `MTU` for IPv4 is `576` (typically recommended
   as the `MTU` for dial-up type applications), whether they arrive whole or in
@@ -462,6 +531,7 @@ socket.bind(1234, () => {
 
 #### Example: IPv4 Outgoing Multicast Interface
 All systems use an IP of the host on the desired physical interface:
+
 ```js
 const socket = dgram.createSocket('udp4');
 
@@ -601,7 +671,7 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/13623
     description: The `recvBufferSize` and `sendBufferSize` options are
                  supported now.
-  - version: REPLACEME
+  - version: v11.4.0
     pr-url: https://github.com/nodejs/node/pull/23798
     description: The `ipv6Only` option is supported.
 -->
@@ -651,16 +721,18 @@ and `udp6` sockets). The bound address and port can be retrieved using
 
 [`'close'`]: #dgram_event_close
 [`Error`]: errors.html#errors_class_error
-[`EventEmitter`]: events.html
+[`ERR_SOCKET_DGRAM_IS_CONNECTED`]: errors.html#errors_err_socket_dgram_is_connected
+[`ERR_SOCKET_DGRAM_NOT_CONNECTED`]: errors.html#errors_err_socket_dgram_not_connected
+[`System Error`]: errors.html#errors_class_systemerror
 [`close()`]: #dgram_socket_close_callback
 [`cluster`]: cluster.html
+[`connect()`]: #dgram_socket_connect_port_address_callback
 [`dgram.Socket#bind()`]: #dgram_socket_bind_options_callback
 [`dgram.createSocket()`]: #dgram_dgram_createsocket_options_callback
 [`dns.lookup()`]: dns.html#dns_dns_lookup_hostname_options_callback
 [`socket.address().address`]: #dgram_socket_address
 [`socket.address().port`]: #dgram_socket_address
 [`socket.bind()`]: #dgram_socket_bind_port_address_callback
-[`System Error`]: errors.html#errors_class_systemerror
-[byte length]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding
 [IPv6 Zone Indices]: https://en.wikipedia.org/wiki/IPv6_address#Scoped_literal_IPv6_addresses
 [RFC 4007]: https://tools.ietf.org/html/rfc4007
+[byte length]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding

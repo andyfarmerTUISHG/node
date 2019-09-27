@@ -40,7 +40,7 @@ $ git node wpt url
 
 ### 3. Create the test driver
 
-For example, for the URL tests, add a file `test/wpt/test-whatwg-url.js`:
+For example, for the URL tests, add a file `test/wpt/test-url.js`:
 
 ```js
 'use strict';
@@ -75,14 +75,14 @@ Run the test using `tools/test.py` and see if there are any failures.
 For example, to run all the URL tests under `test/fixtures/wpt/url`:
 
 ```text
-$ tools/test.py wpt/test-whatwg-url
+$ tools/test.py wpt/test-url
 ```
 
 To run a specific test in WPT, for example, `url/url-searchparams.any.js`,
 pass the file name as argument to the corresponding test driver:
 
 ```text
-node --expose-internals test/wpt/test-whatwg-url.js url-searchparams.any.js
+node --expose-internals test/wpt/test-url.js url-searchparams.any.js
 ```
 
 If there are any failures, update the corresponding status file
@@ -134,9 +134,9 @@ It also maintains the LICENSE file in `test/fixtures/wpt`.
 Given a module, the `WPTRunner` class in [`test/common/wpt`](../common/wpt.js)
 loads:
 
-- `.js` test files (for example, `test/common/wpt/url/*.js` for `url`)
-- Status file (for example, `test/wpt/status/url.json` for `url`)
-- The WPT harness
+* `.js` test files (for example, `test/common/wpt/url/*.js` for `url`)
+* Status file (for example, `test/wpt/status/url.json` for `url`)
+* The WPT harness
 
 Then, for each test, it creates a vm with the globals and mocks,
 sets up the harness result hooks, loads the metadata in the test (including
@@ -151,7 +151,7 @@ expected failures.
 {
   "something.scope.js": {  // the file name
     // Optional: If the requirement is not met, this test will be skipped
-    "requires": ["intl"],  // currently only intl is supported
+    "requires": ["small-icu"],  // supports: "small-icu", "full-icu"
 
     // Optional: the test will be skipped with the reason printed
     "skip": "explain why we cannot run a test that's supposed to pass",

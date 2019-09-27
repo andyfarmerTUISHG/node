@@ -89,18 +89,12 @@ onboarding session.
     so that we know what parts of the code base the pull request modifies. It is
     not perfect, of course. Feel free to apply relevant labels and remove
     irrelevant labels from pull requests and issues.
-  * Use the `tsc-review` label if a topic is controversial or isn't coming to a
-    conclusion after an extended time.
   * `semver-{minor,major}`:
     * If a change has the remote *chance* of breaking something, use the
       `semver-major` label
     * When adding a `semver-*` label, add a comment explaining why you're adding
       it. Do it right away so you don't forget!
-  * Please add the `author-ready` label for PRs where:
-    * the CI has been started (not necessarily finished),
-    * no outstanding review comments exist and
-    * at least two Collaborators approved the PR (one Collaborator approval is
-      enough if the pull request has been open for more than 7 days).
+  * Please add the [`author-ready`][] label for PRs, if applicable.
 
 * See [Who to CC in the issue tracker][who-to-cc].
   * This will come more naturally over time
@@ -130,7 +124,7 @@ onboarding session.
 * Be aware: Your opinion carries a lot of weight!
 * Nits (requests for small changes that are not essential) are fine, but try to
   avoid stalling the pull request.
-  * Note that they are nits when you comment: `Nit: change foo() to bar().`
+  * Identify them as nits when you comment: `Nit: change foo() to bar().`
   * If they are stalling the pull request, fix them yourself on merge.
 * Insofar as possible, issues should be identified by tools rather than human
   reviewers. If you are leaving comments about issues that could be identified
@@ -197,7 +191,7 @@ onboarding session.
 
 See the Collaborator Guide: [Landing Pull Requests][].
 
-Note that commits in one PR that belong to one logical change should
+Commits in one PR that belong to one logical change should
 be squashed. It is rarely the case in onboarding exercises, so this
 needs to be pointed out separately during the onboarding.
 
@@ -245,6 +239,7 @@ needs to be pointed out separately during the onboarding.
   the [summit](https://github.com/nodejs/summit) repository for details.
 
 [Code of Conduct]: https://github.com/nodejs/admin/blob/master/CODE_OF_CONDUCT.md
+[`author-ready`]: https://github.com/nodejs/node/blob/master/COLLABORATOR_GUIDE.md#author-ready-pull-requests
 [`core-validate-commit`]: https://github.com/nodejs/core-validate-commit
 [`git-node`]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md
 [`node-core-utils`]: https://github.com/nodejs/node-core-utils

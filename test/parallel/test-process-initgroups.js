@@ -2,10 +2,13 @@
 const common = require('../common');
 const assert = require('assert');
 
-if (common.isWindows || !common.isMainThread) {
+if (common.isWindows) {
   assert.strictEqual(process.initgroups, undefined);
   return;
 }
+
+if (!common.isMainThread)
+  return;
 
 [undefined, null, true, {}, [], () => {}].forEach((val) => {
   assert.throws(
@@ -14,7 +17,7 @@ if (common.isWindows || !common.isMainThread) {
     },
     {
       code: 'ERR_INVALID_ARG_TYPE',
-      name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+      name: 'TypeError',
       message:
         'The "user" argument must be ' +
         'one of type number or string. ' +
@@ -30,7 +33,7 @@ if (common.isWindows || !common.isMainThread) {
     },
     {
       code: 'ERR_INVALID_ARG_TYPE',
-      name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+      name: 'TypeError',
       message:
         'The "extraGroup" argument must be ' +
         'one of type number or string. ' +

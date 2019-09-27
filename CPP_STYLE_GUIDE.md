@@ -13,7 +13,7 @@
   * [CamelCase for methods, functions, and classes](#camelcase-for-methods-functions-and-classes)
   * [snake\_case for local variables and parameters](#snake_case-for-local-variables-and-parameters)
   * [snake\_case\_ for private class fields](#snake_case_-for-private-class-fields)
-  * [snake\_case\_ for C-like structs](#snake_case_-for-c-like-structs)
+  * [snake\_case for C-like structs](#snake_case-for-c-like-structs)
   * [Space after `template`](#space-after-template)
 * [Memory Management](#memory-management)
   * [Memory allocation](#memory-allocation)
@@ -21,13 +21,13 @@
   * [Use explicit pointer comparisons](#use-explicit-pointer-comparisons)
   * [Ownership and Smart Pointers](#ownership-and-smart-pointers)
   * [Avoid non-const references](#avoid-non-const-references)
+  * [Use AliasedBuffers to manipulate TypedArrays](#use-aliasedbuffers-to-manipulate-typedarrays)
 * [Others](#others)
   * [Type casting](#type-casting)
   * [Using `auto`](#using-auto)
   * [Do not include `*.h` if `*-inl.h` has already been included](#do-not-include-h-if--inlh-has-already-been-included)
   * [Avoid throwing JavaScript errors in C++ methods](#avoid-throwing-javascript-errors-in-c)
     * [Avoid throwing JavaScript errors in nested C++ methods](#avoid-throwing-javascript-errors-in-nested-c-methods)
-
 
 ## Guides and References
 
@@ -36,6 +36,7 @@ features and idioms, as well as have some specific guidelines for the use of
 runtime features.
 
 Coding guidelines are based on the following guides (highest priority first):
+
 1. This document
 2. The [Google C++ Style Guide][]
 3. The ISO [C++ Core Guidelines][]
@@ -168,7 +169,7 @@ class Foo {
 };
 ```
 
-### snake\_case\_ for C-like structs
+### snake\_case for C-like structs
 For plain C-like structs snake_case can be used.
 
 ```c++
@@ -185,12 +186,13 @@ class FancyContainer {
  ...
 }
 ```
+
 ## Memory Management
 
 ### Memory allocation
 
-- `Malloc()`, `Calloc()`, etc. from `util.h` abort in Out-of-Memory situations
-- `UncheckedMalloc()`, etc. return `nullptr` in OOM situations
+* `Malloc()`, `Calloc()`, etc. from `util.h` abort in Out-of-Memory situations
+* `UncheckedMalloc()`, etc. return `nullptr` in OOM situations
 
 ### Use `nullptr` instead of `NULL` or `0`
 
@@ -257,17 +259,33 @@ class ExampleClass {
 };
 ```
 
+### Use AliasedBuffers to manipulate TypedArrays
+
+When working with typed arrays that involve direct data modification
+from C++, use an `AliasedBuffer` when possible. The API abstraction and
+the usage scope of `AliasedBuffer` are documented in [aliased_buffer.h][].
+
+```c++
+// Create an AliasedBuffer.
+AliasedBuffer<uint32_t, v8::Uint32Array> data;
+...
+
+// Modify the data through natural operator semantics.
+data[0] = 12345;
+```
+
 ## Others
 
 ### Type casting
 
-- Use `static_cast<T>` if casting is required, and it is valid
-- Use `reinterpret_cast` only when it is necessary
-- Avoid C-style casts (`(type)value`)
-- `dynamic_cast` does not work because Node.js is built without
+* Use `static_cast<T>` if casting is required, and it is valid
+* Use `reinterpret_cast` only when it is necessary
+* Avoid C-style casts (`(type)value`)
+* `dynamic_cast` does not work because Node.js is built without
   [Run Time Type Information][]
 
 Further reading:
+
 * [ES.48]: Avoid casts
 * [ES.49]: If you must use a cast, use a named cast
 
@@ -310,7 +328,7 @@ When there is a need to throw errors from a C++ binding method, try to
 return the data necessary for constructing the errors to JavaScript,
 then construct and throw the errors [using `lib/internal/errors.js`][errors].
 
-Note that in general, type-checks on arguments should be done in JavaScript
+In general, type-checks on arguments should be done in JavaScript
 before the arguments are passed into C++. Then in the C++ binding, simply using
 `CHECK` assertions to guard against invalid arguments should be enough.
 
@@ -369,7 +387,6 @@ side effects.
 Node.js is built [without C++ exception handling][], so code using `throw` or
 even `try` and `catch` **will** break.
 
-
 [C++ Core Guidelines]: http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
 [Google C++ Style Guide]: https://google.github.io/styleguide/cppguide.html
 [Google’s `cpplint`]: https://github.com/google/styleguide
@@ -382,3 +399,4 @@ even `try` and `catch` **will** break.
 [Run Time Type Information]: https://en.wikipedia.org/wiki/Run-time_type_information
 [cppref_auto_ptr]: https://en.cppreference.com/w/cpp/memory/auto_ptr
 [without C++ exception handling]: https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_exceptions.html#intro.using.exception.no
+[aliased_buffer.h]: https://github.com/nodejs/node/blob/master/src/aliased_buffer.h#L12

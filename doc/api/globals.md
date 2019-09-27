@@ -7,11 +7,11 @@ These objects are available in all modules. The following variables may appear
 to be global but are not. They exist only in the scope of modules, see the
 [module system documentation][]:
 
-- [`__dirname`][]
-- [`__filename`][]
-- [`exports`][]
-- [`module`][]
-- [`require()`][]
+* [`__dirname`][]
+* [`__filename`][]
+* [`exports`][]
+* [`module`][]
+* [`require()`][]
 
 The objects listed here are specific to Node.js. There are a number of
 [built-in objects][] that are part of the JavaScript language itself, which are
@@ -114,8 +114,6 @@ added: v11.0.0
 
 <!-- type=global -->
 
-> Stability: 1 - Experimental
-
 * `callback` {Function} Function to be queued.
 
 The `queueMicrotask()` method queues a microtask to invoke `callback`. If
@@ -123,7 +121,7 @@ The `queueMicrotask()` method queues a microtask to invoke `callback`. If
 event will be emitted.
 
 The microtask queue is managed by V8 and may be used in a similar manner to
-the `process.nextTick()` queue, which is managed by Node.js. The
+the [`process.nextTick()`][] queue, which is managed by Node.js. The
 `process.nextTick()` queue is always processed before the microtask queue
 within each turn of the Node.js event loop.
 
@@ -197,7 +195,6 @@ added: v11.0.0
 
 The WHATWG `TextEncoder` class. See the [`TextEncoder`][] section.
 
-
 ## URL
 <!-- YAML
 added: v10.0.0
@@ -229,6 +226,10 @@ The object that acts as the namespace for all W3C
 [WebAssembly][webassembly-org] related functionality. See the
 [Mozilla Developer Network][webassembly-mdn] for usage and compatibility.
 
+[`TextDecoder`]: util.html#util_class_util_textdecoder
+[`TextEncoder`]: util.html#util_class_util_textencoder
+[`URLSearchParams`]: url.html#url_class_urlsearchparams
+[`URL`]: url.html#url_class_url
 [`__dirname`]: modules.html#modules_dirname
 [`__filename`]: modules.html#modules_filename
 [`clearImmediate`]: timers.html#timers_clearimmediate_immediate
@@ -237,15 +238,12 @@ The object that acts as the namespace for all W3C
 [`console`]: console.html
 [`exports`]: modules.html#modules_exports
 [`module`]: modules.html#modules_module
+[`process.nextTick()`]: process.html#process_process_nexttick_callback_args
 [`process` object]: process.html#process_process
-[`require()`]: modules.html#modules_require
+[`require()`]: modules.html#modules_require_id
 [`setImmediate`]: timers.html#timers_setimmediate_callback_args
 [`setInterval`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout`]: timers.html#timers_settimeout_callback_delay_args
-[`TextDecoder`]: util.html#util_class_util_textdecoder
-[`TextEncoder`]: util.html#util_class_util_textencoder
-[`URL`]: url.html#url_class_url
-[`URLSearchParams`]: url.html#url_class_urlsearchparams
 [buffer section]: buffer.html
 [built-in objects]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
 [module system documentation]: modules.html

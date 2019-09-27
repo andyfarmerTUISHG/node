@@ -5,7 +5,7 @@
 const common = require('../common.js');
 const util = require('util');
 
-// if there are --dur=N and --len=N args, then
+// If there are --dur=N and --len=N args, then
 // run the function with those settings.
 // if not, then queue up a bunch of child processes.
 const bench = common.createBenchmark(main, {
@@ -36,23 +36,23 @@ function main({ dur, len, type }) {
     if (err)
       fail(err, 'connect');
 
-    // the meat of the benchmark is right here:
+    // The meat of the benchmark is right here:
     bench.start();
     var bytes = 0;
 
-    setTimeout(function() {
+    setTimeout(() => {
       // report in Gb/sec
       bench.end((bytes * 8) / (1024 * 1024 * 1024));
       process.exit(0);
     }, dur * 1000);
 
     clientHandle.onread = function(buffer) {
-      // we're not expecting to ever get an EOF from the client.
-      // just lots of data forever.
+      // We're not expecting to ever get an EOF from the client.
+      // Just lots of data forever.
       if (!buffer)
         fail('read');
 
-      // don't slice the buffer.  the point of this is to isolate, not
+      // Don't slice the buffer. The point of this is to isolate, not
       // simulate real traffic.
       bytes += buffer.byteLength;
     };

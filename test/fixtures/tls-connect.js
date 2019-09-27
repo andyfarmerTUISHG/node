@@ -18,7 +18,7 @@ exports.debug = util.debuglog('test');
 exports.tls = tls;
 
 // Pre-load keys from common fixtures for ease of use by tests.
-const keys = exports.keys = {
+exports.keys = {
   agent1: load('agent1', 'ca1'),
   agent2: load('agent2', 'agent2'),
   agent3: load('agent3', 'ca2'),
@@ -26,15 +26,18 @@ const keys = exports.keys = {
   agent5: load('agent5', 'ca2'),
   agent6: load('agent6', 'ca1'),
   agent7: load('agent7', 'fake-cnnic-root'),
+  agent10: load('agent10', 'ca2'),
+  ec10: load('ec10', 'ca5'),
   ec: load('ec', 'ec'),
 };
 
-function load(cert, issuer) {
-  issuer = issuer || cert; // Assume self-signed if no issuer
+// `root` is the self-signed root of the trust chain, not an intermediate ca.
+function load(cert, root) {
+  root = root || cert; // Assume self-signed if no issuer.
   const id = {
     key: fixtures.readKey(cert + '-key.pem', 'binary'),
     cert: fixtures.readKey(cert + '-cert.pem', 'binary'),
-    ca: fixtures.readKey(issuer + '-cert.pem', 'binary'),
+    ca: fixtures.readKey(root + '-cert.pem', 'binary'),
   };
   return id;
 }
@@ -50,7 +53,7 @@ exports.connect = function connect(options, callback) {
     tls.createServer(options.server, function(conn) {
       server.conn = conn;
       conn.pipe(conn);
-      maybeCallback()
+      maybeCallback();
     }).listen(0, function() {
       server.server = this;
 
@@ -89,7 +92,7 @@ exports.connect = function connect(options, callback) {
   function maybeCallback() {
     if (!callback)
       return;
-    if (server.conn && (client.conn || client.err)) {
+    if (server.conn && client.conn) {
       const err = pair.client.err || pair.server.err;
       callback(err, pair, cleanup);
       callback = null;
@@ -102,4 +105,4 @@ exports.connect = function connect(options, callback) {
     if (client.conn)
       client.conn.end();
   }
-}
+};

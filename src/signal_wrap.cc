@@ -22,6 +22,7 @@
 #include "async_wrap-inl.h"
 #include "env-inl.h"
 #include "handle_wrap.h"
+#include "node_process.h"
 #include "util-inl.h"
 #include "v8.h"
 
@@ -43,7 +44,8 @@ class SignalWrap : public HandleWrap {
  public:
   static void Initialize(Local<Object> target,
                          Local<Value> unused,
-                         Local<Context> context) {
+                         Local<Context> context,
+                         void* priv) {
     Environment* env = Environment::GetCurrent(context);
     Local<FunctionTemplate> constructor = env->NewFunctionTemplate(New);
     constructor->InstanceTemplate()->SetInternalFieldCount(1);
@@ -57,7 +59,7 @@ class SignalWrap : public HandleWrap {
 
     target->Set(env->context(), signalString,
                 constructor->GetFunction(env->context()).ToLocalChecked())
-                .FromJust();
+                .Check();
   }
 
   SET_NO_MEMORY_INFO()
@@ -99,7 +101,17 @@ class SignalWrap : public HandleWrap {
       }
     }
 #endif
-    int err = uv_signal_start(&wrap->handle_, OnSignal, signum);
+    int err = uv_signal_start(
+        &wrap->handle_,
+        [](uv_signal_t* handle, int signum) {
+          SignalWrap* wrap = ContainerOf(&SignalWrap::handle_, handle);
+          Environment* env = wrap->env();
+          HandleScope handle_scope(env->isolate());
+          Context::Scope context_scope(env->context());
+          Local<Value> arg = Integer::New(env->isolate(), signum);
+          wrap->MakeCallback(env->onsignal_string(), 1, &arg);
+        },
+        signum);
     args.GetReturnValue().Set(err);
   }
 
@@ -108,16 +120,6 @@ class SignalWrap : public HandleWrap {
     ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
     int err = uv_signal_stop(&wrap->handle_);
     args.GetReturnValue().Set(err);
-  }
-
-  static void OnSignal(uv_signal_t* handle, int signum) {
-    SignalWrap* wrap = ContainerOf(&SignalWrap::handle_, handle);
-    Environment* env = wrap->env();
-    HandleScope handle_scope(env->isolate());
-    Context::Scope context_scope(env->context());
-
-    Local<Value> arg = Integer::New(env->isolate(), signum);
-    wrap->MakeCallback(env->onsignal_string(), 1, &arg);
   }
 
   uv_signal_t handle_;

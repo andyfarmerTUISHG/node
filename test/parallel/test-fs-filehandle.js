@@ -21,16 +21,13 @@ let fdnum;
 
 common.expectWarning({
   'internal/test/binding': [
-    'These APIs are exposed only for testing ' +
-    'and are not tracked by any versioning system or deprecation process.',
-    common.noWarnCode
+    'These APIs are for internal testing only. Do not use them.'
   ],
   'Warning': [
-    `Closing file descriptor ${fdnum} on garbage collection`,
-    common.noWarnCode
+    `Closing file descriptor ${fdnum} on garbage collection`
   ]
 });
 
-gc();  // eslint-disable-line no-undef
+global.gc();
 
 setTimeout(() => {}, 10);

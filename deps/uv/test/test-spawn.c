@@ -49,7 +49,9 @@ static char exepath[1024];
 static size_t exepath_size = 1024;
 static char* args[5];
 static int no_term_signal;
+#ifndef _WIN32
 static int timer_counter;
+#endif
 static uv_tcp_t tcp_server;
 
 #define OUTPUT_SIZE 1024
@@ -138,10 +140,12 @@ static void on_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
 }
 
 
+#ifndef _WIN32
 static void on_read_once(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
   uv_read_stop(tcp);
   on_read(tcp, nread, buf);
 }
+#endif
 
 
 static void write_cb(uv_write_t* req, int status) {
@@ -173,9 +177,11 @@ static void timer_cb(uv_timer_t* handle) {
 }
 
 
+#ifndef _WIN32
 static void timer_counter_cb(uv_timer_t* handle) {
   ++timer_counter;
 }
+#endif
 
 
 TEST_IMPL(spawn_fails) {
@@ -224,6 +230,34 @@ TEST_IMPL(spawn_fails_check_for_waitpid_cleanup) {
   return 0;
 }
 #endif
+
+
+TEST_IMPL(spawn_empty_env) {
+  char* env[1];
+
+  /* The autotools dynamic library build requires the presence of
+   * DYLD_LIBARY_PATH (macOS) or LD_LIBRARY_PATH (other Unices)
+   * in the environment, but of course that doesn't work with
+   * the empty environment that we're testing here.
+   */
+  if (NULL != getenv("DYLD_LIBRARY_PATH") ||
+      NULL != getenv("LD_LIBRARY_PATH")) {
+    RETURN_SKIP("doesn't work with DYLD_LIBRARY_PATH/LD_LIBRARY_PATH");
+  }
+
+  init_process_options("spawn_helper1", exit_cb);
+  options.env = env;
+  env[0] = NULL;
+
+  ASSERT(0 == uv_spawn(uv_default_loop(), &process, &options));
+  ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
+
+  ASSERT(exit_cb_called == 1);
+  ASSERT(close_cb_called == 1);
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
 
 
 TEST_IMPL(spawn_exit_code) {
@@ -1198,7 +1232,7 @@ TEST_IMPL(argument_escaping) {
 int make_program_env(char** env_block, WCHAR** dst_ptr);
 
 TEST_IMPL(environment_creation) {
-  int i;
+  size_t i;
   char* environment[] = {
     "FOO=BAR",
     "SYSTEM=ROOT", /* substring of a supplied var name */
@@ -1399,6 +1433,12 @@ TEST_IMPL(spawn_setuid_fails) {
 
   options.flags |= UV_PROCESS_SETUID;
   options.uid = 0;
+
+  /* These flags should be ignored on Unices. */
+  options.flags |= UV_PROCESS_WINDOWS_HIDE;
+  options.flags |= UV_PROCESS_WINDOWS_HIDE_CONSOLE;
+  options.flags |= UV_PROCESS_WINDOWS_HIDE_GUI;
+  options.flags |= UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS;
 
   r = uv_spawn(uv_default_loop(), &process, &options);
 #if defined(__CYGWIN__)
@@ -1832,7 +1872,7 @@ TEST_IMPL(spawn_quoted_path) {
 
 /* Helper for child process of spawn_inherit_streams */
 #ifndef _WIN32
-int spawn_stdin_stdout(void) {
+void spawn_stdin_stdout(void) {
   char buf[1024];
   char* pbuf;
   for (;;) {
@@ -1841,7 +1881,7 @@ int spawn_stdin_stdout(void) {
       r = read(0, buf, sizeof buf);
     } while (r == -1 && errno == EINTR);
     if (r == 0) {
-      return 1;
+      return;
     }
     ASSERT(r > 0);
     c = r;
@@ -1855,10 +1895,9 @@ int spawn_stdin_stdout(void) {
       c = c - w;
     }
   }
-  return 2;
 }
 #else
-int spawn_stdin_stdout(void) {
+void spawn_stdin_stdout(void) {
   char buf[1024];
   char* pbuf;
   HANDLE h_stdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -1871,7 +1910,7 @@ int spawn_stdin_stdout(void) {
     DWORD to_write;
     if (!ReadFile(h_stdin, buf, sizeof buf, &n_read, NULL)) {
       ASSERT(GetLastError() == ERROR_BROKEN_PIPE);
-      return 1;
+      return;
     }
     to_write = n_read;
     pbuf = buf;
@@ -1881,6 +1920,5 @@ int spawn_stdin_stdout(void) {
       pbuf += n_written;
     }
   }
-  return 2;
 }
 #endif /* !_WIN32 */

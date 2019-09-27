@@ -1,29 +1,34 @@
+#include "stream_base.h"  // NOLINT(build/include_inline)
 #include "stream_base-inl.h"
 #include "stream_wrap.h"
 
 #include "node.h"
 #include "node_buffer.h"
 #include "node_errors.h"
-#include "node_internals.h"
 #include "env-inl.h"
 #include "js_stream.h"
 #include "string_bytes.h"
-#include "util.h"
 #include "util-inl.h"
 #include "v8.h"
 
-#include <limits.h>  // INT_MAX
+#include <climits>  // INT_MAX
 
 namespace node {
 
 using v8::Array;
 using v8::ArrayBuffer;
 using v8::Context;
+using v8::DontDelete;
+using v8::DontEnum;
+using v8::External;
+using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Local;
+using v8::MaybeLocal;
 using v8::Object;
+using v8::ReadOnly;
 using v8::String;
 using v8::Value;
 
@@ -46,6 +51,13 @@ int StreamBase::ReadStopJS(const FunctionCallbackInfo<Value>& args) {
   return ReadStop();
 }
 
+int StreamBase::UseUserBuffer(const FunctionCallbackInfo<Value>& args) {
+  CHECK(Buffer::HasInstance(args[0]));
+
+  uv_buf_t buf = uv_buf_init(Buffer::Data(args[0]), Buffer::Length(args[0]));
+  PushStreamListener(new CustomBufferJSListener(buf));
+  return 0;
+}
 
 int StreamBase::Shutdown(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
@@ -113,9 +125,9 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
-  MallocedBuffer<char> storage;
+  AllocatedBuffer storage;
   if (storage_size > 0)
-    storage = MallocedBuffer<char>(storage_size);
+    storage = env->AllocateManaged(storage_size);
 
   offset = 0;
   if (!all_buffers) {
@@ -131,8 +143,8 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
 
       // Write string
       CHECK_LE(offset, storage_size);
-      char* str_storage = storage.data + offset;
-      size_t str_size = storage_size - offset;
+      char* str_storage = storage.data() + offset;
+      size_t str_size = storage.size() - offset;
 
       Local<String> string = chunk->ToString(env->context()).ToLocalChecked();
       enum encoding encoding = ParseEncoding(env->isolate(),
@@ -151,7 +163,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
   StreamWriteResult res = Write(*bufs, count, nullptr, req_wrap_obj);
   SetWriteResult(res);
   if (res.wrap != nullptr && storage_size > 0) {
-    res.wrap->SetAllocatedStorage(storage.release(), storage_size);
+    res.wrap->SetAllocatedStorage(std::move(storage));
   }
   return res.err;
 }
@@ -241,18 +253,18 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
     CHECK_EQ(count, 1);
   }
 
-  MallocedBuffer<char> data;
+  AllocatedBuffer data;
 
   if (try_write) {
     // Copy partial data
-    data = MallocedBuffer<char>(buf.len);
-    memcpy(data.data, buf.base, buf.len);
+    data = env->AllocateManaged(buf.len);
+    memcpy(data.data(), buf.base, buf.len);
     data_size = buf.len;
   } else {
     // Write it
-    data = MallocedBuffer<char>(storage_size);
+    data = env->AllocateManaged(storage_size);
     data_size = StringBytes::Write(env->isolate(),
-                                   data.data,
+                                   data.data(),
                                    storage_size,
                                    string,
                                    enc);
@@ -260,7 +272,7 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
 
   CHECK_LE(data_size, storage_size);
 
-  buf = uv_buf_init(data.data, data_size);
+  buf = uv_buf_init(data.data(), data_size);
 
   uv_stream_t* send_handle = nullptr;
 
@@ -272,7 +284,7 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
     // collected before `AfterWrite` is called.
     req_wrap_obj->Set(env->context(),
                       env->handle_string(),
-                      send_handle_obj).FromJust();
+                      send_handle_obj).Check();
   }
 
   StreamWriteResult res = Write(&buf, 1, send_handle, req_wrap_obj);
@@ -280,29 +292,31 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
 
   SetWriteResult(res);
   if (res.wrap != nullptr) {
-    res.wrap->SetAllocatedStorage(data.release(), data_size);
+    res.wrap->SetAllocatedStorage(std::move(data));
   }
 
   return res.err;
 }
 
 
-void StreamBase::CallJSOnreadMethod(ssize_t nread,
-                                    Local<ArrayBuffer> ab,
-                                    size_t offset) {
+MaybeLocal<Value> StreamBase::CallJSOnreadMethod(ssize_t nread,
+                                                 Local<ArrayBuffer> ab,
+                                                 size_t offset,
+                                                 StreamBaseJSChecks checks) {
   Environment* env = env_;
 
-#ifdef DEBUG
-  CHECK_EQ(static_cast<int32_t>(nread), nread);
-  CHECK_LE(offset, INT32_MAX);
+  DCHECK_EQ(static_cast<int32_t>(nread), nread);
+  DCHECK_LE(offset, INT32_MAX);
 
-  if (ab.IsEmpty()) {
-    CHECK_EQ(offset, 0);
-    CHECK_LE(nread, 0);
-  } else {
-    CHECK_GE(nread, 0);
+  if (checks == DONT_SKIP_NREAD_CHECKS) {
+    if (ab.IsEmpty()) {
+      DCHECK_EQ(offset, 0);
+      DCHECK_LE(nread, 0);
+    } else {
+      DCHECK_GE(nread, 0);
+    }
   }
-#endif
+
   env->stream_base_state()[kReadBytesOrError] = nread;
   env->stream_base_state()[kArrayBufferOffset] = offset;
 
@@ -312,7 +326,9 @@ void StreamBase::CallJSOnreadMethod(ssize_t nread,
 
   AsyncWrap* wrap = GetAsyncWrap();
   CHECK_NOT_NULL(wrap);
-  wrap->MakeCallback(env->onread_string(), arraysize(argv), argv);
+  Local<Value> onread = wrap->object()->GetInternalField(kOnReadFunctionField);
+  CHECK(onread->IsFunction());
+  return wrap->MakeCallback(onread.As<Function>(), arraysize(argv), argv);
 }
 
 
@@ -330,6 +346,103 @@ Local<Object> StreamBase::GetObject() {
   return GetAsyncWrap()->object();
 }
 
+void StreamBase::AddMethod(Environment* env,
+                           Local<Signature> signature,
+                           enum PropertyAttribute attributes,
+                           Local<FunctionTemplate> t,
+                           JSMethodFunction* stream_method,
+                           Local<String> string) {
+  Local<FunctionTemplate> templ =
+      env->NewFunctionTemplate(stream_method,
+                               signature,
+                               v8::ConstructorBehavior::kThrow,
+                               v8::SideEffectType::kHasNoSideEffect);
+  t->PrototypeTemplate()->SetAccessorProperty(
+      string, templ, Local<FunctionTemplate>(), attributes);
+}
+
+void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
+  HandleScope scope(env->isolate());
+
+  enum PropertyAttribute attributes =
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete | DontEnum);
+  Local<Signature> sig = Signature::New(env->isolate(), t);
+
+  AddMethod(env, sig, attributes, t, GetFD, env->fd_string());
+  AddMethod(
+      env, sig, attributes, t, GetExternal, env->external_stream_string());
+  AddMethod(env, sig, attributes, t, GetBytesRead, env->bytes_read_string());
+  AddMethod(
+      env, sig, attributes, t, GetBytesWritten, env->bytes_written_string());
+  env->SetProtoMethod(t, "readStart", JSMethod<&StreamBase::ReadStartJS>);
+  env->SetProtoMethod(t, "readStop", JSMethod<&StreamBase::ReadStopJS>);
+  env->SetProtoMethod(t, "shutdown", JSMethod<&StreamBase::Shutdown>);
+  env->SetProtoMethod(t,
+                      "useUserBuffer",
+                      JSMethod<&StreamBase::UseUserBuffer>);
+  env->SetProtoMethod(t, "writev", JSMethod<&StreamBase::Writev>);
+  env->SetProtoMethod(t, "writeBuffer", JSMethod<&StreamBase::WriteBuffer>);
+  env->SetProtoMethod(
+      t, "writeAsciiString", JSMethod<&StreamBase::WriteString<ASCII>>);
+  env->SetProtoMethod(
+      t, "writeUtf8String", JSMethod<&StreamBase::WriteString<UTF8>>);
+  env->SetProtoMethod(
+      t, "writeUcs2String", JSMethod<&StreamBase::WriteString<UCS2>>);
+  env->SetProtoMethod(
+      t, "writeLatin1String", JSMethod<&StreamBase::WriteString<LATIN1>>);
+  t->PrototypeTemplate()->Set(FIXED_ONE_BYTE_STRING(env->isolate(),
+                                                    "isStreamBase"),
+                              True(env->isolate()));
+  t->PrototypeTemplate()->SetAccessor(
+      FIXED_ONE_BYTE_STRING(env->isolate(), "onread"),
+      BaseObject::InternalFieldGet<kOnReadFunctionField>,
+      BaseObject::InternalFieldSet<kOnReadFunctionField, &Value::IsFunction>);
+}
+
+void StreamBase::GetFD(const FunctionCallbackInfo<Value>& args) {
+  // Mimic implementation of StreamBase::GetFD() and UDPWrap::GetFD().
+  StreamBase* wrap = StreamBase::FromObject(args.This().As<Object>());
+  if (wrap == nullptr) return args.GetReturnValue().Set(UV_EINVAL);
+
+  if (!wrap->IsAlive()) return args.GetReturnValue().Set(UV_EINVAL);
+
+  args.GetReturnValue().Set(wrap->GetFD());
+}
+
+void StreamBase::GetBytesRead(const FunctionCallbackInfo<Value>& args) {
+  StreamBase* wrap = StreamBase::FromObject(args.This().As<Object>());
+  if (wrap == nullptr) return args.GetReturnValue().Set(0);
+
+  // uint64_t -> double. 53bits is enough for all real cases.
+  args.GetReturnValue().Set(static_cast<double>(wrap->bytes_read_));
+}
+
+void StreamBase::GetBytesWritten(const FunctionCallbackInfo<Value>& args) {
+  StreamBase* wrap = StreamBase::FromObject(args.This().As<Object>());
+  if (wrap == nullptr) return args.GetReturnValue().Set(0);
+
+  // uint64_t -> double. 53bits is enough for all real cases.
+  args.GetReturnValue().Set(static_cast<double>(wrap->bytes_written_));
+}
+
+void StreamBase::GetExternal(const FunctionCallbackInfo<Value>& args) {
+  StreamBase* wrap = StreamBase::FromObject(args.This().As<Object>());
+  if (wrap == nullptr) return;
+
+  Local<External> ext = External::New(args.GetIsolate(), wrap);
+  args.GetReturnValue().Set(ext);
+}
+
+template <int (StreamBase::*Method)(const FunctionCallbackInfo<Value>& args)>
+void StreamBase::JSMethod(const FunctionCallbackInfo<Value>& args) {
+  StreamBase* wrap = StreamBase::FromObject(args.Holder().As<Object>());
+  if (wrap == nullptr) return;
+
+  if (!wrap->IsAlive()) return args.GetReturnValue().Set(UV_EINVAL);
+
+  AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(wrap->GetAsyncWrap());
+  args.GetReturnValue().Set((wrap->*Method)(args));
+}
 
 int StreamResource::DoTryWrite(uv_buf_t** bufs, size_t* count) {
   // No TryWrite by default
@@ -347,34 +460,56 @@ void StreamResource::ClearError() {
 }
 
 
-uv_buf_t StreamListener::OnStreamAlloc(size_t suggested_size) {
-  return uv_buf_init(Malloc(suggested_size), suggested_size);
+uv_buf_t EmitToJSStreamListener::OnStreamAlloc(size_t suggested_size) {
+  CHECK_NOT_NULL(stream_);
+  Environment* env = static_cast<StreamBase*>(stream_)->stream_env();
+  return env->AllocateManaged(suggested_size).release();
 }
 
-
-void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
+void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
   CHECK_NOT_NULL(stream_);
   StreamBase* stream = static_cast<StreamBase*>(stream_);
   Environment* env = stream->stream_env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
+  AllocatedBuffer buf(env, buf_);
 
   if (nread <= 0)  {
-    free(buf.base);
     if (nread < 0)
       stream->CallJSOnreadMethod(nread, Local<ArrayBuffer>());
     return;
   }
 
-  CHECK_LE(static_cast<size_t>(nread), buf.len);
-  char* base = Realloc(buf.base, nread);
+  CHECK_LE(static_cast<size_t>(nread), buf.size());
+  buf.Resize(nread);
 
-  Local<ArrayBuffer> obj = ArrayBuffer::New(
-      env->isolate(),
-      base,
-      nread,
-      v8::ArrayBufferCreationMode::kInternalized);  // Transfer ownership to V8.
-  stream->CallJSOnreadMethod(nread, obj);
+  stream->CallJSOnreadMethod(nread, buf.ToArrayBuffer());
+}
+
+
+uv_buf_t CustomBufferJSListener::OnStreamAlloc(size_t suggested_size) {
+  return buffer_;
+}
+
+
+void CustomBufferJSListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
+  CHECK_NOT_NULL(stream_);
+  CHECK_EQ(buf.base, buffer_.base);
+
+  StreamBase* stream = static_cast<StreamBase*>(stream_);
+  Environment* env = stream->stream_env();
+  HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
+
+  MaybeLocal<Value> ret = stream->CallJSOnreadMethod(nread,
+                             Local<ArrayBuffer>(),
+                             0,
+                             StreamBase::SKIP_NREAD_CHECKS);
+  Local<Value> next_buf_v;
+  if (ret.ToLocal(&next_buf_v) && !next_buf_v->IsUndefined()) {
+    buffer_.base = Buffer::Data(next_buf_v);
+    buffer_.len = Buffer::Length(next_buf_v);
+  }
 }
 
 

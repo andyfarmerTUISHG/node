@@ -73,7 +73,9 @@ const myURL =
 
 ### Class: URL
 <!-- YAML
-added: v7.0.0
+added:
+  - v7.0.0
+  - v6.13.0
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18281
@@ -168,7 +170,7 @@ console.log(myURL.href);
 ```
 
 Invalid URL characters included in the value assigned to the `hash` property
-are [percent-encoded][]. Note that the selection of which characters to
+are [percent-encoded][]. The selection of which characters to
 percent-encode may vary somewhat from what the [`url.parse()`][] and
 [`url.format()`][] methods would produce.
 
@@ -274,7 +276,7 @@ console.log(myURL.href);
 ```
 
 Invalid URL characters included in the value assigned to the `password` property
-are [percent-encoded][]. Note that the selection of which characters to
+are [percent-encoded][]. The selection of which characters to
 percent-encode may vary somewhat from what the [`url.parse()`][] and
 [`url.format()`][] methods would produce.
 
@@ -295,7 +297,7 @@ console.log(myURL.href);
 ```
 
 Invalid URL characters included in the value assigned to the `pathname`
-property are [percent-encoded][]. Note that the selection of which characters
+property are [percent-encoded][]. The selection of which characters
 to percent-encode may vary somewhat from what the [`url.parse()`][] and
 [`url.format()`][] methods would produce.
 
@@ -314,7 +316,7 @@ The port value can be an empty string in which case the port depends on
 the protocol/scheme:
 
 | protocol | port |
-| :------- | :--- |
+| -------- | ---- |
 | "ftp"    | 21   |
 | "file"   |      |
 | "gopher" | 70   |
@@ -371,7 +373,7 @@ console.log(myURL.port);
 // Prints 1234
 ```
 
-Note that numbers which contain a decimal point,
+Numbers which contain a decimal point,
 such as floating-point numbers or numbers in scientific notation,
 are not an exception to this rule.
 Leading numbers up to the decimal point will be set as the URL's port,
@@ -438,8 +440,8 @@ console.log(u.href);
 // fish://example.org
 ```
 
-The protocol schemes considered to be special by the WHATWG URL Standard
-include: `ftp`, `file`, `gopher`, `http`, `https`, `ws`, and `wss`.
+According to the WHATWG URL Standard, special protocol schemes are `ftp`,
+`file`, `gopher`, `http`, `https`, `ws`, and `wss`.
 
 #### url.search
 
@@ -458,7 +460,7 @@ console.log(myURL.href);
 ```
 
 Any invalid URL characters appearing in the value assigned the `search`
-property will be [percent-encoded][]. Note that the selection of which
+property will be [percent-encoded][]. The selection of which
 characters to percent-encode may vary somewhat from what the [`url.parse()`][]
 and [`url.format()`][] methods would produce.
 
@@ -488,7 +490,7 @@ console.log(myURL.href);
 ```
 
 Any invalid URL characters appearing in the value assigned the `username`
-property will be [percent-encoded][]. Note that the selection of which
+property will be [percent-encoded][]. The selection of which
 characters to percent-encode may vary somewhat from what the [`url.parse()`][]
 and [`url.format()`][] methods would produce.
 
@@ -525,7 +527,9 @@ console.log(JSON.stringify(myURLs));
 
 ### Class: URLSearchParams
 <!-- YAML
-added: v7.5.0
+added:
+  - v7.5.0
+  - v6.13.0
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18281
@@ -602,7 +606,9 @@ console.log(params.toString());
 
 #### Constructor: new URLSearchParams(obj)
 <!-- YAML
-added: v7.10.0
+added:
+  - v7.10.0
+  - v6.13.0
 -->
 
 * `obj` {Object} An object representing a collection of key-value pairs
@@ -627,7 +633,9 @@ console.log(params.toString());
 
 #### Constructor: new URLSearchParams(iterable)
 <!-- YAML
-added: v7.10.0
+added:
+  - v7.10.0
+  - v6.13.0
 -->
 
 * `iterable` {Iterable} An iterable object whose elements are key-value pairs
@@ -785,7 +793,9 @@ console.log(params.toString());
 
 #### urlSearchParams.sort()
 <!-- YAML
-added: v7.7.0
+added:
+  - v7.7.0
+  - v6.13.0
 -->
 
 Sort all existing name-value pairs in-place by their names. Sorting is done
@@ -836,7 +846,9 @@ for (const [name, value] of params) {
 
 ### url.domainToASCII(domain)
 <!-- YAML
-added: v7.4.0
+added:
+  - v7.4.0
+  - v6.13.0
 -->
 
 * `domain` {string}
@@ -859,7 +871,9 @@ console.log(url.domainToASCII('xn--iñvalid.com'));
 
 ### url.domainToUnicode(domain)
 <!-- YAML
-added: v7.4.0
+added:
+  - v7.4.0
+  - v6.13.0
 -->
 
 * `domain` {string}
@@ -881,6 +895,9 @@ console.log(url.domainToUnicode('xn--iñvalid.com'));
 ```
 
 ### url.fileURLToPath(url)
+<!-- YAML
+added: v10.12.0
+-->
 
 * `url` {URL | string} The file URL string or URL object to convert to a path.
 * Returns: {string} The fully-resolved platform-specific Node.js file path.
@@ -942,6 +959,9 @@ console.log(url.format(myURL, { fragment: false, unicode: true, auth: false }));
 ```
 
 ### url.pathToFileURL(path)
+<!-- YAML
+added: v10.12.0
+-->
 
 * `path` {string} The path to convert to a File URL.
 * Returns: {URL} The file URL object.
@@ -1123,9 +1143,9 @@ The formatting process operates as follows:
   colon (`:`) character, the literal string `:` will be appended to `result`.
 * If either of the following conditions is true, then the literal string `//`
   will be appended to `result`:
-    * `urlObject.slashes` property is true;
-    * `urlObject.protocol` begins with `http`, `https`, `ftp`, `gopher`, or
-      `file`;
+  * `urlObject.slashes` property is true;
+  * `urlObject.protocol` begins with `http`, `https`, `ftp`, `gopher`, or
+    `file`;
 * If the value of the `urlObject.auth` property is truthy, and either
   `urlObject.host` or `urlObject.hostname` are not `undefined`, the value of
   `urlObject.auth` will be coerced into a string and appended to `result`

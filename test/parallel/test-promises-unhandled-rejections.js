@@ -286,7 +286,7 @@ asyncTest('While inside setImmediate, catching a rejected promise derived ' +
   onUnhandledFail(done);
 
   setImmediate(function() {
-    // reproduces on first tick and inside of setImmediate
+    // Reproduces on first tick and inside of setImmediate
     Promise
       .resolve('resolve')
       .then(function() {
@@ -699,3 +699,22 @@ asyncTest('Rejected promise inside unhandledRejection allows nextTick loop' +
     process.nextTick(() => promise.catch(() => done()));
   });
 });
+
+asyncTest(
+  'Unhandled promise rejection emits a warning immediately',
+  function(done) {
+    clean();
+    Promise.reject(0);
+    const { emitWarning } = process;
+    process.emitWarning = common.mustCall((...args) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+        done();
+      }
+      emitWarning(...args);
+    }, 2);
+
+    let timer = setTimeout(common.mustNotCall(), 10000);
+  },
+);

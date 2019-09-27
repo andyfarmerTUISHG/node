@@ -147,7 +147,7 @@ function testFtruncate(cb) {
   const file2 = path.resolve(tmp, 'truncate-file-2.txt');
   fs.writeFileSync(file2, 'Hi');
   const fd = fs.openSync(file2, 'r+');
-  process.on('exit', () => fs.closeSync(fd));
+  process.on('beforeExit', () => fs.closeSync(fd));
   fs.ftruncateSync(fd, 4);
   assert(fs.readFileSync(file2).equals(Buffer.from('Hi\u0000\u0000')));
 }
@@ -165,7 +165,7 @@ function testFtruncate(cb) {
   const file4 = path.resolve(tmp, 'truncate-file-4.txt');
   fs.writeFileSync(file4, 'Hi');
   const fd = fs.openSync(file4, 'r+');
-  process.on('exit', () => fs.closeSync(fd));
+  process.on('beforeExit', () => fs.closeSync(fd));
   fs.ftruncate(fd, 4, common.mustCall(function(err) {
     assert.ifError(err);
     assert(fs.readFileSync(file4).equals(Buffer.from('Hi\u0000\u0000')));
@@ -176,14 +176,14 @@ function testFtruncate(cb) {
   const file5 = path.resolve(tmp, 'truncate-file-5.txt');
   fs.writeFileSync(file5, 'Hi');
   const fd = fs.openSync(file5, 'r+');
-  process.on('exit', () => fs.closeSync(fd));
+  process.on('beforeExit', () => fs.closeSync(fd));
 
   ['', false, null, {}, []].forEach((input) => {
     assert.throws(
       () => fs.truncate(file5, input, common.mustNotCall()),
       {
         code: 'ERR_INVALID_ARG_TYPE',
-        name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+        name: 'TypeError',
         message: 'The "len" argument must be of type number. ' +
                  `Received type ${typeof input}`
       }
@@ -193,7 +193,7 @@ function testFtruncate(cb) {
       () => fs.ftruncate(fd, input),
       {
         code: 'ERR_INVALID_ARG_TYPE',
-        name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+        name: 'TypeError',
         message: 'The "len" argument must be of type number. ' +
                  `Received type ${typeof input}`
       }
@@ -205,7 +205,7 @@ function testFtruncate(cb) {
       () => fs.truncate(file5, input),
       {
         code: 'ERR_OUT_OF_RANGE',
-        name: 'RangeError [ERR_OUT_OF_RANGE]',
+        name: 'RangeError',
         message: 'The value of "len" is out of range. It must be ' +
                   `an integer. Received ${input}`
       }
@@ -215,7 +215,7 @@ function testFtruncate(cb) {
       () => fs.ftruncate(fd, input),
       {
         code: 'ERR_OUT_OF_RANGE',
-        name: 'RangeError [ERR_OUT_OF_RANGE]',
+        name: 'RangeError',
         message: 'The value of "len" is out of range. It must be ' +
                   `an integer. Received ${input}`
       }
@@ -232,7 +232,7 @@ function testFtruncate(cb) {
   const file6 = path.resolve(tmp, 'truncate-file-6.txt');
   fs.writeFileSync(file6, 'Hi');
   const fd = fs.openSync(file6, 'r+');
-  process.on('exit', () => fs.closeSync(fd));
+  process.on('beforeExit', () => fs.closeSync(fd));
   fs.ftruncate(fd, -1, common.mustCall(function(err) {
     assert.ifError(err);
     assert(fs.readFileSync(file6).equals(Buffer.from('')));
@@ -267,7 +267,7 @@ function testFtruncate(cb) {
     () => fs.truncate('/foo/bar', input),
     {
       code: 'ERR_INVALID_ARG_TYPE',
-      name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+      name: 'TypeError',
       message: 'The "len" argument must be of type number. ' +
                `Received type ${typeof input}`
     }
@@ -280,7 +280,7 @@ function testFtruncate(cb) {
       () => fs[fnName](input),
       {
         code: 'ERR_INVALID_ARG_TYPE',
-        name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+        name: 'TypeError',
         message: 'The "fd" argument must be of type number. ' +
                  `Received type ${typeof input}`
       }

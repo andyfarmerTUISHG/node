@@ -30,6 +30,7 @@ import test
 import os
 from os.path import join, exists, basename, isdir
 import re
+from functools import reduce
 
 FLAGS_PATTERN = re.compile(r"//\s+Flags:(.*)")
 
@@ -49,7 +50,7 @@ class MessageTestCase(test.TestCase):
     else: return str.startswith('==') or str.startswith('**')
 
   def IsFailureOutput(self, output):
-    f = file(self.expected)
+    f = open(self.expected)
     # Skip initial '#' comment and spaces
     #for line in f:
     #  if (not line.startswith('#')) and (not line.strip()):
@@ -72,13 +73,13 @@ class MessageTestCase(test.TestCase):
       print("expect=%d" % len(patterns))
       print("actual=%d" % len(outlines))
       print("patterns:")
-      for i in xrange(len(patterns)):
+      for i in range(len(patterns)):
         print("pattern = %s" % patterns[i])
       print("outlines:")
-      for i in xrange(len(outlines)):
+      for i in range(len(outlines)):
         print("outline = %s" % outlines[i])
       return True
-    for i in xrange(len(patterns)):
+    for i in range(len(patterns)):
       if not re.match(patterns[i], outlines[i]):
         print("match failed")
         print("line=%d" % i)
@@ -119,13 +120,13 @@ class MessageTestConfiguration(test.TestConfiguration):
   def ListTests(self, current_path, path, arch, mode):
     all_tests = [current_path + [t] for t in self.Ls(self.root)]
     result = []
-    for test in all_tests:
-      if self.Contains(path, test):
-        file_path = join(self.root, reduce(join, test[1:], ''))
+    for tst in all_tests:
+      if self.Contains(path, tst):
+        file_path = join(self.root, reduce(join, tst[1:], ''))
         output_path = file_path[:file_path.rfind('.')] + '.out'
         if not exists(output_path):
           raise Exception("Could not find %s" % output_path)
-        result.append(MessageTestCase(test, file_path, output_path,
+        result.append(MessageTestCase(tst, file_path, output_path,
                                       arch, mode, self.context, self))
     return result
 

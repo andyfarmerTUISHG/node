@@ -10,37 +10,77 @@ separate module.
 ## Class: https.Agent
 <!-- YAML
 added: v0.4.5
+changes:
+  - version: v2.5.0
+    pr-url: https://github.com/nodejs/node/pull/2228
+    description: parameter `maxCachedSessions` added to `options` for TLS
+                 sessions reuse.
+  - version: v5.3.0
+    pr-url: https://github.com/nodejs/node/pull/4252
+    description: support `0` `maxCachedSessions` to disable TLS session caching.
 -->
 
 An [`Agent`][] object for HTTPS similar to [`http.Agent`][]. See
 [`https.request()`][] for more information.
+
+### new Agent([options])
+<!-- YAML
+changes:
+  - version: v12.5.0
+    pr-url: https://github.com/nodejs/node/pull/28209
+    description: do not automatically set servername if the target host was
+                 specified using an IP address.
+-->
+
+* `options` {Object} Set of configurable options to set on the agent.
+  Can have the same fields as for [`http.Agent(options)`][], and
+  * `maxCachedSessions` {number} maximum number of TLS cached sessions.
+    Use `0` to disable TLS session caching. **Default:** `100`.
+  * `servername` {string} the value of
+    [Server Name Indication extension][sni wiki] to be sent to the server. Use
+    empty string `''` to disable sending the extension.
+    **Default:** hostname of the target server, unless the target server
+    is specified using an IP address, in which case the default is `''` (no
+    extension).
+
+    See [`Session Resumption`][] for information about TLS session reuse.
 
 ## Class: https.Server
 <!-- YAML
 added: v0.3.4
 -->
 
-This class is a subclass of `tls.Server` and emits events same as
-[`http.Server`][]. See [`http.Server`][] for more information.
+* Extends: {tls.Server}
+
+See [`http.Server`][] for more information.
 
 ### server.close([callback])
 <!-- YAML
 added: v0.1.90
 -->
+
 * `callback` {Function}
 * Returns: {https.Server}
 
 See [`server.close()`][`http.close()`] from the HTTP module for details.
+
+### server.headersTimeout
+<!-- YAML
+added: v11.3.0
+-->
+
+* {number} **Default:** `40000`
+
+See [`http.Server#headersTimeout`][].
 
 ### server.listen()
 
 Starts the HTTPS server listening for encrypted connections.
 This method is identical to [`server.listen()`][] from [`net.Server`][].
 
-
 ### server.maxHeadersCount
 
-- {number} **Default:** `2000`
+* {number} **Default:** `2000`
 
 See [`http.Server#maxHeadersCount`][].
 
@@ -48,6 +88,7 @@ See [`http.Server#maxHeadersCount`][].
 <!-- YAML
 added: v0.11.2
 -->
+
 * `msecs` {number} **Default:** `120000` (2 minutes)
 * `callback` {Function}
 * Returns: {https.Server}
@@ -58,7 +99,8 @@ See [`http.Server#setTimeout()`][].
 <!-- YAML
 added: v0.11.2
 -->
-- {number} **Default:** `120000` (2 minutes)
+
+* {number} **Default:** `120000` (2 minutes)
 
 See [`http.Server#timeout`][].
 
@@ -66,7 +108,8 @@ See [`http.Server#timeout`][].
 <!-- YAML
 added: v8.0.0
 -->
-- {number} **Default:** `5000` (5 seconds)
+
+* {number} **Default:** `5000` (5 seconds)
 
 See [`http.Server#keepAliveTimeout`][].
 
@@ -74,6 +117,7 @@ See [`http.Server#keepAliveTimeout`][].
 <!-- YAML
 added: v0.3.4
 -->
+
 * `options` {Object} Accepts `options` from [`tls.createServer()`][],
  [`tls.createSecureContext()`][] and [`http.createServer()`][].
 * `requestListener` {Function} A listener to be added to the `'request'` event.
@@ -125,6 +169,7 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/10638
     description: The `options` parameter can be a WHATWG `URL` object.
 -->
+
 * `url` {string | URL}
 * `options` {Object | string | URL} Accepts the same `options` as
   [`https.request()`][], with the `method` always set to `GET`.
@@ -175,12 +220,13 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/10638
     description: The `options` parameter can be a WHATWG `URL` object.
 -->
+
 * `url` {string | URL}
 * `options` {Object | string | URL} Accepts all `options` from
   [`http.request()`][], with some differences in default values:
-  - `protocol` **Default:** `'https:'`
-  - `port` **Default:** `443`
-  - `agent` **Default:** `https.globalAgent`
+  * `protocol` **Default:** `'https:'`
+  * `port` **Default:** `443`
+  * `agent` **Default:** `https.globalAgent`
 * `callback` {Function}
 
 Makes a request to a secure web server.
@@ -218,6 +264,7 @@ req.on('error', (e) => {
 });
 req.end();
 ```
+
 Example using options from [`tls.connect()`][]:
 
 ```js
@@ -361,13 +408,15 @@ headers: max-age=0; pin-sha256="WoiWRyIOVNa9ihaBciRSC7XHjliYS9VwUGOIud4PB18="; p
 [`Agent`]: #https_class_https_agent
 [`URL`]: url.html#url_the_whatwg_url_api
 [`http.Agent`]: http.html#http_class_http_agent
+[`http.Agent(options)`]: http.html#http_new_agent_options
+[`http.Server#headersTimeout`]: http.html#http_server_headerstimeout
 [`http.Server#keepAliveTimeout`]: http.html#http_server_keepalivetimeout
 [`http.Server#maxHeadersCount`]: http.html#http_server_maxheaderscount
 [`http.Server#setTimeout()`]: http.html#http_server_settimeout_msecs_callback
 [`http.Server#timeout`]: http.html#http_server_timeout
 [`http.Server`]: http.html#http_class_http_server
-[`http.createServer()`]: http.html#http_http_createserver_options_requestlistener
 [`http.close()`]: http.html#http_server_close_callback
+[`http.createServer()`]: http.html#http_http_createserver_options_requestlistener
 [`http.get()`]: http.html#http_http_get_options_callback
 [`http.request()`]: http.html#http_http_request_options_callback
 [`https.Agent`]: #https_class_https_agent
@@ -378,3 +427,5 @@ headers: max-age=0; pin-sha256="WoiWRyIOVNa9ihaBciRSC7XHjliYS9VwUGOIud4PB18="; p
 [`tls.connect()`]: tls.html#tls_tls_connect_options_callback
 [`tls.createSecureContext()`]: tls.html#tls_tls_createsecurecontext_options
 [`tls.createServer()`]: tls.html#tls_tls_createserver_options_secureconnectionlistener
+[`Session Resumption`]: tls.html#tls_session_resumption
+[sni wiki]: https://en.wikipedia.org/wiki/Server_Name_Indication

@@ -1,8 +1,7 @@
-/* eslint-disable node-core/required-modules */
+/* eslint-disable node-core/require-common-first, node-core/required-modules */
 'use strict';
 
 const assert = require('assert');
-const common = require('../common');
 const fixtures = require('../common/fixtures');
 const fs = require('fs');
 const fsPromises = fs.promises;
@@ -42,16 +41,25 @@ class ResourceLoader {
     this.path = path;
   }
 
-  fetch(url, asPromise = true) {
+  /**
+   * Load a resource in test/fixtures/wpt specified with a URL
+   * @param {string} from the path of the file loading this resource,
+   *                      relative to thw WPT folder.
+   * @param {string} url the url of the resource being loaded.
+   * @param {boolean} asPromise if true, return the resource in a
+   *                            pseudo-Response object.
+   */
+  read(from, url, asFetch = true) {
     // We need to patch this to load the WebIDL parser
     url = url.replace(
       '/resources/WebIDLParser.js',
       '/resources/webidl2/lib/webidl2.js'
     );
+    const base = path.dirname(from);
     const file = url.startsWith('/') ?
       fixtures.path('wpt', url) :
-      fixtures.path('wpt', this.path, url);
-    if (asPromise) {
+      fixtures.path('wpt', base, url);
+    if (asFetch) {
       return fsPromises.readFile(file)
         .then((data) => {
           return {
@@ -66,77 +74,199 @@ class ResourceLoader {
   }
 }
 
+class StatusRule {
+  constructor(key, value, pattern = undefined) {
+    this.key = key;
+    this.requires = value.requires || [];
+    this.fail = value.fail;
+    this.skip = value.skip;
+    if (pattern) {
+      this.pattern = this.transformPattern(pattern);
+    }
+    // TODO(joyeecheung): implement this
+    this.scope = value.scope;
+    this.comment = value.comment;
+  }
+
+  /**
+   * Transform a filename pattern into a RegExp
+   * @param {string} pattern
+   * @returns {RegExp}
+   */
+  transformPattern(pattern) {
+    const result = path.normalize(pattern).replace(/[-/\\^$+?.()|[\]{}]/g, '\\$&');
+    return new RegExp(result.replace('*', '.*'));
+  }
+}
+
+class StatusRuleSet {
+  constructor() {
+    // We use two sets of rules to speed up matching
+    this.exactMatch = {};
+    this.patternMatch = [];
+  }
+
+  /**
+   * @param {object} rules
+   */
+  addRules(rules) {
+    for (const key of Object.keys(rules)) {
+      if (key.includes('*')) {
+        this.patternMatch.push(new StatusRule(key, rules[key], key));
+      } else {
+        this.exactMatch[key] = new StatusRule(key, rules[key]);
+      }
+    }
+  }
+
+  match(file) {
+    const result = [];
+    const exact = this.exactMatch[file];
+    if (exact) {
+      result.push(exact);
+    }
+    for (const item of this.patternMatch) {
+      if (item.pattern.test(file)) {
+        result.push(item);
+      }
+    }
+    return result;
+  }
+}
+
 class WPTTest {
   /**
-   * @param {string} mod
-   * @param {string} filename
-   * @param {string[]} requires
-   * @param {string | undefined} failReason
-   * @param {string | undefined} skipReason
+   * @param {string} mod name of the WPT module, e.g.
+   *                     'html/webappapis/microtask-queuing'
+   * @param {string} filename path of the test, relative to mod, e.g.
+   *                          'test.any.js'
+   * @param {StatusRule[]} rules
    */
-  constructor(mod, filename, requires, failReason, skipReason) {
-    this.module = mod; // name of the WPT module, e.g. 'url'
-    this.filename = filename;  // name of the test file
-    this.requires = requires;
-    this.failReason = failReason;
-    this.skipReason = skipReason;
+  constructor(mod, filename, rules) {
+    this.module = mod;
+    this.filename = filename;
+
+    this.requires = new Set();
+    this.failReasons = [];
+    this.skipReasons = [];
+    for (const item of rules) {
+      if (item.requires.length) {
+        for (const req of item.requires) {
+          this.requires.add(req);
+        }
+      }
+      if (item.fail) {
+        this.failReasons.push(item.fail);
+      }
+      if (item.skip) {
+        this.skipReasons.push(item.skip);
+      }
+    }
+  }
+
+  getRelativePath() {
+    return path.join(this.module, this.filename);
   }
 
   getAbsolutePath() {
-    return fixtures.path('wpt', this.module, this.filename);
+    return fixtures.path('wpt', this.getRelativePath());
   }
 
   getContent() {
     return fs.readFileSync(this.getAbsolutePath(), 'utf8');
   }
+}
 
-  shouldSkip() {
-    return this.failReason || this.skipReason;
+const kIntlRequirement = {
+  none: 0,
+  small: 1,
+  full: 2,
+  // TODO(joyeecheung): we may need to deal with --with-intl=system-icu
+};
+
+class IntlRequirement {
+  constructor() {
+    this.currentIntl = kIntlRequirement.none;
+    if (process.config.variables.v8_enable_i18n_support === 0) {
+      this.currentIntl = kIntlRequirement.none;
+      return;
+    }
+    // i18n enabled
+    if (process.config.variables.icu_small) {
+      this.currentIntl = kIntlRequirement.small;
+    } else {
+      this.currentIntl = kIntlRequirement.full;
+    }
   }
 
-  requireIntl() {
-    return this.requires.includes('intl');
+  /**
+   * @param {Set} requires
+   * @returns {string|false} The config that the build is lacking, or false
+   */
+  isLacking(requires) {
+    const current = this.currentIntl;
+    if (requires.has('full-icu') && current !== kIntlRequirement.full) {
+      return 'full-icu';
+    }
+    if (requires.has('small-icu') && current < kIntlRequirement.small) {
+      return 'small-icu';
+    }
+    return false;
   }
 }
 
+const intlRequirements = new IntlRequirement();
+
+
 class StatusLoader {
+  /**
+   * @param {string} path relative path of the WPT subset
+   */
   constructor(path) {
     this.path = path;
     this.loaded = false;
-    this.status = null;
+    this.rules = new StatusRuleSet();
     /** @type {WPTTest[]} */
     this.tests = [];
   }
 
-  loadTest(file) {
-    let requires = [];
-    let failReason;
-    let skipReason;
-    if (this.status[file]) {
-      requires = this.status[file].requires || [];
-      failReason = this.status[file].fail;
-      skipReason = this.status[file].skip;
+  /**
+   * Grep for all .*.js file recursively in a directory.
+   * @param {string} dir
+   */
+  grep(dir) {
+    let result = [];
+    const list = fs.readdirSync(dir);
+    for (const file of list) {
+      const filepath = path.join(dir, file);
+      const stat = fs.statSync(filepath);
+      if (stat.isDirectory()) {
+        const list = this.grep(filepath);
+        result = result.concat(list);
+      } else {
+        if (!(/\.\w+\.js$/.test(filepath))) {
+          continue;
+        }
+        result.push(filepath);
+      }
     }
-    return new WPTTest(this.path, file, requires,
-                       failReason, skipReason);
+    return result;
   }
 
   load() {
     const dir = path.join(__dirname, '..', 'wpt');
     const statusFile = path.join(dir, 'status', `${this.path}.json`);
     const result = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
-    this.status = result;
+    this.rules.addRules(result);
 
-    const list = fs.readdirSync(fixtures.path('wpt', this.path));
-
+    const subDir = fixtures.path('wpt', this.path);
+    const list = this.grep(subDir);
     for (const file of list) {
-      this.tests.push(this.loadTest(file));
+      const relativePath = path.relative(subDir, file);
+      const match = this.rules.match(relativePath);
+      this.tests.push(new WPTTest(this.path, relativePath, match));
     }
     this.loaded = true;
-  }
-
-  get jsTests() {
-    return this.tests.filter((test) => test.filename.endsWith('.js'));
   }
 }
 
@@ -156,7 +286,7 @@ class WPTRunner {
     this.status = new StatusLoader(path);
     this.status.load();
     this.tests = new Map(
-      this.status.jsTests.map((item) => [item.filename, item])
+      this.status.tests.map((item) => [item.filename, item])
     );
 
     this.results = new Map();
@@ -171,7 +301,10 @@ class WPTRunner {
    */
   copyGlobalsFromObject(obj, names) {
     for (const name of names) {
-      const desc = Object.getOwnPropertyDescriptor(global, name);
+      const desc = Object.getOwnPropertyDescriptor(obj, name);
+      if (!desc) {
+        assert.fail(`${name} does not exist on the object`);
+      }
       this.globals.set(name, desc);
     }
   }
@@ -188,11 +321,6 @@ class WPTRunner {
   // TODO(joyeecheung): work with the upstream to port more tests in .html
   // to .js.
   runJsTests() {
-    // TODO(joyeecheung): it's still under discussion whether we should leave
-    // err.name alone. See https://github.com/nodejs/node/issues/20253
-    const internalErrors = require('internal/errors');
-    internalErrors.useOriginalName = true;
-
     let queue = [];
 
     // If the tests are run as `node test/wpt/test-something.js subset.any.js`,
@@ -215,8 +343,9 @@ class WPTRunner {
       const meta = test.title = this.getMeta(content);
 
       const absolutePath = test.getAbsolutePath();
-      const context = this.generateContext(test.filename);
-      const code = this.mergeScripts(meta, content);
+      const context = this.generateContext(test);
+      const relativePath = test.getRelativePath();
+      const code = this.mergeScripts(relativePath, meta, content);
       try {
         vm.runInContext(code, context, {
           filename: absolutePath
@@ -233,16 +362,15 @@ class WPTRunner {
     this.tryFinish();
   }
 
-  mock() {
+  mock(testfile) {
     const resource = this.resource;
     const result = {
       // This is a mock, because at the moment fetch is not implemented
       // in Node.js, but some tests and harness depend on this to pull
       // resources.
       fetch(file) {
-        return resource.fetch(file);
+        return resource.read(testfile, file, true);
       },
-      location: {},
       GLOBAL: {
         isWindow() { return false; }
       },
@@ -253,16 +381,17 @@ class WPTRunner {
   }
 
   // Note: this is how our global space for the WPT test should look like
-  getSandbox() {
-    const result = this.mock();
+  getSandbox(filename) {
+    const result = this.mock(filename);
     for (const [name, desc] of this.globals) {
       Object.defineProperty(result, name, desc);
     }
     return result;
   }
 
-  generateContext(filename) {
-    const sandbox = this.sandbox = this.getSandbox();
+  generateContext(test) {
+    const filename = test.filename;
+    const sandbox = this.sandbox = this.getSandbox(test.getRelativePath());
     const context = this.context = vm.createContext(sandbox);
 
     const harnessPath = fixtures.path('wpt', 'resources', 'testharness.js');
@@ -281,8 +410,6 @@ class WPTRunner {
     // TODO(joyeecheung): we are not a window - work with the upstream to
     // add a new scope for us.
 
-    const { Worker } = require('worker_threads');
-    sandbox.DedicatedWorker = Worker;  // Pretend we are a Worker
     return context;
   }
 
@@ -328,8 +455,9 @@ class WPTRunner {
       for (const item of items) {
         switch (item.type) {
           case FAILED: {
-            if (test.failReason) {
+            if (test.failReasons.length) {
               console.log(`[EXPECTED_FAILURE] ${item.test.name}`);
+              console.log(test.failReasons.join('; '));
             } else {
               console.log(`[UNEXPECTED_FAILURE] ${item.test.name}`);
               unexpectedFailures.push([title, filename, item]);
@@ -386,10 +514,10 @@ class WPTRunner {
     });
   }
 
-  skip(filename, reason) {
+  skip(filename, reasons) {
     this.addResult(filename, {
       type: SKIPPED,
-      reason
+      reason: reasons.join('; ')
     });
   }
 
@@ -417,7 +545,7 @@ class WPTRunner {
     }
   }
 
-  mergeScripts(meta, content) {
+  mergeScripts(base, meta, content) {
     if (!meta.script) {
       return content;
     }
@@ -425,7 +553,7 @@ class WPTRunner {
     // only one script
     let result = '';
     for (const script of meta.script) {
-      result += this.resource.fetch(script, false);
+      result += this.resource.read(base, script, false);
     }
 
     return result + content;
@@ -435,13 +563,14 @@ class WPTRunner {
     const queue = [];
     for (const test of this.tests.values()) {
       const filename = test.filename;
-      if (test.skipReason) {
-        this.skip(filename, test.skipReason);
+      if (test.skipReasons.length > 0) {
+        this.skip(filename, test.skipReasons);
         continue;
       }
 
-      if (!common.hasIntl && test.requireIntl()) {
-        this.skip(filename, 'missing Intl');
+      const lackingIntl = intlRequirements.isLacking(test.requires);
+      if (lackingIntl) {
+        this.skip(filename, [ `requires ${lackingIntl}` ]);
         continue;
       }
 

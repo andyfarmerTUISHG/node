@@ -41,7 +41,7 @@ let nodeVersion = null;
 let outputDir = null;
 let apilinks = {};
 
-args.forEach(function(arg) {
+args.forEach((arg) => {
   if (!arg.startsWith('--')) {
     filename = arg;
   } else if (arg.startsWith('--node-version=')) {
@@ -49,9 +49,12 @@ args.forEach(function(arg) {
   } else if (arg.startsWith('--output-directory=')) {
     outputDir = arg.replace(/^--output-directory=/, '');
   } else if (arg.startsWith('--apilinks=')) {
-    apilinks = JSON.parse(
-      fs.readFileSync(arg.replace(/^--apilinks=/, ''), 'utf8')
-    );
+    const linkFile = arg.replace(/^--apilinks=/, '');
+    const data = fs.readFileSync(linkFile, 'utf8');
+    if (!data.trim()) {
+      throw new Error(`${linkFile} is empty`);
+    }
+    apilinks = JSON.parse(data);
   }
 });
 
